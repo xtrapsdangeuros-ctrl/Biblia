@@ -238,3 +238,11 @@ def test_arte_vertical(tmp_path):
     Image.new("RGB", (1280, 720), "#e8d9b5").save(mini)
     arte = arte_vertical(mini, None, tmp_path / "v.png", 12, "Salmos", 23, 2, 3, "Canal")
     assert Image.open(arte).size == (1080, 1920)
+
+
+def test_minutagem_com_encerramento_e_link_do_testamento():
+    conf = biblia.config({})
+    estado = {"playlists": {"at": "PLAT"}}
+    v = biblia.campos(conf, 1, 365, _caps("Gênesis", 1, [1, 2, 3]), [0, 60, 120], estado, encerramento=200)
+    assert "02:00 Gênesis 3\n03:20 Encerramento" in v["minutagem"]
+    assert v["testamento"] == "Antigo Testamento" and v["link_testamento"].endswith("PLAT")

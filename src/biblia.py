@@ -226,13 +226,17 @@ def link_playlist(playlist_id: str | None) -> str:
 
 
 def campos(conf: dict, dia: int, total_dias: int, caps: list[Capitulo], inicios: list[float] | None,
-           estado: dict, proximo_id: str | None = None, cta: dict | None = None) -> dict:
+           estado: dict, proximo_id: str | None = None, cta: dict | None = None,
+           encerramento: float | None = None) -> dict:
     ref = referencia(caps)
     livro = caps[0].livro
     minutagem = ""
     if inicios and len(caps) >= 3:   # o YouTube só cria capítulos clicáveis com 3 marcações ou mais
         minutagem = "Capítulos deste vídeo:\n" + "\n".join(
-            f"{_tempo(t)} {c.livro} {c.numero}" for c, t in zip(caps, inicios)) + "\n\n"
+            f"{_tempo(t)} {c.livro} {c.numero}" for c, t in zip(caps, inicios))
+        if encerramento:   # a tela final (últimos segundos)
+            minutagem += f"\n{_tempo(encerramento)} Encerramento"
+        minutagem += "\n\n"
     base = {"referencia": ref, "dia": dia, "total_dias": total_dias, "livro": livro,
             "livro_sem_espaco": _sem_espaco(livro)}
     hashtags = " ".join(_preencher(h, base) for h in conf.get("hashtags") or [])
@@ -243,6 +247,8 @@ def campos(conf: dict, dia: int, total_dias: int, caps: list[Capitulo], inicios:
             "link_plano": link_playlist(playlists.get("plano")) or "playlist do plano no canal",
             "link_livro": link_playlist(playlists.get(f"livro:{livro}")),
             "link_at": link_playlist(playlists.get("at")), "link_nt": link_playlist(playlists.get("nt")),
+            "testamento": "Novo Testamento" if caps[0].ordem_livro >= PRIMEIRO_LIVRO_NT else "Antigo Testamento",
+            "link_testamento": link_playlist(playlists.get("nt" if caps[0].ordem_livro >= PRIMEIRO_LIVRO_NT else "at")),
             "link_proximo": link_video(proximo_id) or conf.get("sem_proximo", ""),
             "link_canal": (cta or {}).get("canal", "")}
 
@@ -400,7 +406,8 @@ def publicar_dia(drive, youtube, raiz: str, cfg: dict, conf: dict, plano: list[l
             inicios.append(total)
             total += duracao_audio(audio)
             audios.append(audio)
-        valores = campos(conf, dia, total_dias, caps, inicios, estado, cta=cfg.get("cta"))
+        fim_leitura = total if conf.get("tela_final") else None
+        valores = campos(conf, dia, total_dias, caps, inicios, estado, cta=cfg.get("cta"), encerramento=fim_leitura)
         dados = snippet(conf, valores, caps, idioma)
         log.info("Dia %d de %d: %d capítulo(s), %.0f min (%s)", dia, total_dias, len(caps), total / 60, privacidade)
         if dry_run:
@@ -414,7 +421,8 @@ def publicar_dia(drive, youtube, raiz: str, cfg: dict, conf: dict, plano: list[l
                 _playlist(youtube, estado, chave, conf, {**valores, "livro": livro}, privacidade)
             except Exception as erro:
                 log.warning("Não consegui criar a playlist %s: %s", discreto.Seguro(chave.split(":")[0]), erro)
-        valores = campos(conf, dia, total_dias, caps, inicios, estado, cta=cfg.get("cta"))
+        fim_leitura = total if conf.get("tela_final") else None
+        valores = campos(conf, dia, total_dias, caps, inicios, estado, cta=cfg.get("cta"), encerramento=fim_leitura)
         dados = snippet(conf, valores, caps, idioma)
         imagem = _baixar_imagem(drive, raiz, conf.get("imagem") or "", tmp)
         ref = valores["referencia"]
@@ -436,7 +444,8 @@ def publicar_dia(drive, youtube, raiz: str, cfg: dict, conf: dict, plano: list[l
         log.info("Dia %d enviado: %s", dia, video_id)
         estado.setdefault("dias", {})[str(dia)] = {"miniatura": estilo_miniatura(conf),
             "video_id": video_id, "data": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "capitulos": [[c.livro, c.numero] for c in caps], "inicios": [round(t, 1) for t in inicios]}
+            "capitulos": [[c.livro, c.numero] for c in caps], "inicios": [round(t, 1) for t in inicios],
+            "encerramento": round(fim_leitura, 1) if fim_leitura else None}
         drive.gravar_json(raiz, ARQ_ESTADO, estado)   # grava logo: se algo abaixo falhar, o dia não é reenviado
 
         try:
@@ -466,7 +475,7 @@ def _link_no_anterior(youtube, conf, cfg, plano, dia, estado, video_id, idioma) 
         return
     caps = plano[dia - 2]
     valores = campos(conf, dia - 1, len(plano), caps, anterior.get("inicios"), estado, proximo_id=video_id,
-                     cta=cfg.get("cta"))
+                     cta=cfg.get("cta"), encerramento=anterior.get("encerramento"))
     try:
         youtube.atualizar_metadados(anterior["video_id"], snippet(conf, valores, caps, idioma))
         anterior["proximo"] = video_id
