@@ -79,7 +79,12 @@ de `total_capitulos` da ficha), ele **não publica**, cria `ERRO - <nome>.txt` n
 pip install google-auth-oauthlib
 python scripts/autorizar.py
 ```
-O navegador abre: entre com a **conta do canal**. O Google avisa que o app não foi verificado: clique em
+O navegador abre: entre com a **conta do canal**.
+
+**Segundo canal na mesma conta Google ("conta de marca"):** ele não tem Google Drive, e o Google mostra
+"Serviço indisponível". Autorize em duas partes: `python scripts/autorizar.py --parte youtube` (no login,
+escolha o **canal**; gera o `GOOGLE_REFRESH_TOKEN`) e `python scripts/autorizar.py --parte drive` (escolha a **sua
+conta**, dona da pasta; gera o `GOOGLE_REFRESH_TOKEN_DRIVE`, um segredo a mais no ambiente desse canal). O Google avisa que o app não foi verificado: clique em
 **Avançado > Acessar** (o app é seu). No fim, o terminal mostra 3 valores. **Não cole esses valores em nenhum
 lugar além dos segredos do GitHub.**
 
@@ -93,6 +98,7 @@ Os segredos ficam no **ambiente** do canal (Settings > Environments > `canal-1` 
 | `GOOGLE_CLIENT_SECRET` | mostrado pelo `autorizar.py` |
 | `GOOGLE_REFRESH_TOKEN` | mostrado pelo `autorizar.py` |
 | `DRIVE_PASTA_RAIZ` | o ID da pasta raiz (passo 2.2) |
+| `GOOGLE_REFRESH_TOKEN_DRIVE` | só para canal "conta de marca" (veja o passo 2.3) |
 | `GOOGLE_TTS_API_KEY` | opcional: só para narração com voz sintética |
 | `GOOGLE_BOOKS_API_KEY` | opcional: busca de capas no Google Livros |
 

@@ -54,13 +54,14 @@ def _motivo(erro: HttpError) -> str:
         return ""
 
 
-def credenciais_do_ambiente() -> Credentials:
-    faltando = [v for v in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN") if not os.environ.get(v)]
+def credenciais_do_ambiente(token: str = "GOOGLE_REFRESH_TOKEN") -> Credentials:
+    """Credencial da conta do canal. Com `token`, usa outra autorização (ex.: GOOGLE_REFRESH_TOKEN_DRIVE)."""
+    faltando = [v for v in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", token) if not os.environ.get(v)]
     if faltando:
         raise SystemExit(f"Faltam variáveis de ambiente: {', '.join(faltando)}")
     return Credentials(
         token=None,
-        refresh_token=os.environ["GOOGLE_REFRESH_TOKEN"],
+        refresh_token=os.environ[token],
         token_uri="https://oauth2.googleapis.com/token",
         client_id=os.environ["GOOGLE_CLIENT_ID"],
         client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
@@ -71,6 +72,10 @@ def credenciais_do_ambiente() -> Credentials:
 
 class Drive:
     def __init__(self, credenciais: Credentials):
+        # Canal que é "conta de marca" não tem Drive: os arquivos ficam na conta pessoal, com autorização própria
+        # (segredo GOOGLE_REFRESH_TOKEN_DRIVE, gerado com: python scripts/autorizar.py --parte drive).
+        if os.environ.get("GOOGLE_REFRESH_TOKEN_DRIVE"):
+            credenciais = credenciais_do_ambiente("GOOGLE_REFRESH_TOKEN_DRIVE")
         self.api = build("drive", "v3", credentials=credenciais, cache_discovery=False)
 
     def listar(self, pasta_id: str) -> list[dict]:
