@@ -287,17 +287,25 @@ def _playlist(youtube, estado: dict, chave: str, conf: dict, valores: dict, priv
     return playlists[chave]
 
 
+def _achar(drive, pasta_id: str, nome: str) -> dict | None:
+    """Como drive.achar, mas sem ligar para acento composto ou não (o Mac envia "í" como "i" + acento),
+    maiúsculas e espaços sobrando."""
+    alvo = normalizar(" ".join(unicodedata.normalize("NFC", nome).split()))
+    return next((i for i in drive.listar(pasta_id)
+                 if normalizar(" ".join(unicodedata.normalize("NFC", i["name"]).split())) == alvo), None)
+
+
 def _baixar_imagem(drive, raiz: str, caminho: str, destino_dir: Path) -> Path | None:
     if not caminho:
         return None
     pasta = raiz
     partes = [p for p in caminho.split("/") if p]
     for parte in partes[:-1]:
-        achado = drive.achar(pasta, parte)
+        achado = _achar(drive, pasta, parte)
         if not achado:
             return None
         pasta = achado["id"]
-    arquivo = drive.achar(pasta, partes[-1])
+    arquivo = _achar(drive, pasta, partes[-1])
     return drive.baixar(arquivo["id"], destino_dir / Path(partes[-1]).name) if arquivo else None
 
 
@@ -390,7 +398,7 @@ def rodar(drive, youtube, raiz: str, cfg: dict, dry_run: bool = False, dia_pedid
     from google_api import LimiteDiario
 
     conf = config(cfg)
-    pasta = drive.achar(raiz, conf["pasta_audios"])
+    pasta = _achar(drive, raiz, conf["pasta_audios"])
     if not pasta:
         log.error("Não achei a pasta dos áudios da Bíblia (canal.yaml > biblia > pasta_audios).")
         return 1

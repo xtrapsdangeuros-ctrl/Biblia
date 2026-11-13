@@ -99,7 +99,8 @@ def carregar_config(caminho: Path | None = None, canal: bool = True) -> dict:
 def so_audiolivro(nome: str) -> bool:
     """True (e um aviso no log) se o canal está no modo Bíblia: esta etapa é só dos audiolivros e não roda."""
     if str(carregar_config().get("modo") or "").strip().lower() == "biblia":
-        log.info("%s: não se aplica ao modo Bíblia; pulando.", nome)
+        import discreto
+        log.info("%s: não se aplica ao modo Bíblia; pulando.", discreto.Seguro(nome))
         return True
     return False
 

@@ -61,10 +61,11 @@ def credenciais_do_ambiente(token: str = "GOOGLE_REFRESH_TOKEN") -> Credentials:
         raise SystemExit(f"Faltam variáveis de ambiente: {', '.join(faltando)}")
     return Credentials(
         token=None,
-        refresh_token=os.environ[token],
+        # .strip(): um espaço ou uma linha em branco colada junto no segredo do GitHub não pode quebrar o login
+        refresh_token=os.environ[token].strip(),
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=os.environ["GOOGLE_CLIENT_ID"],
-        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
+        client_id=os.environ["GOOGLE_CLIENT_ID"].strip(),
+        client_secret=os.environ["GOOGLE_CLIENT_SECRET"].strip(),
         # sem "scopes": a renovação devolve só o que já foi autorizado (pedir um escopo novo daria erro)
         scopes=None,
     )

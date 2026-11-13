@@ -1,6 +1,7 @@
 """Modo Bíblia (src/biblia.py): plano de leitura, títulos e o fluxo com Drive e YouTube falsos."""
 
 import subprocess
+import unicodedata
 
 import pytest
 
@@ -144,3 +145,10 @@ def test_etapas_de_audiolivro_pulam_no_modo_biblia(monkeypatch):
     assert comum.so_audiolivro("Extras") is True
     monkeypatch.setattr(comum, "carregar_config", lambda *a, **k: {})
     assert comum.so_audiolivro("Extras") is False
+
+
+def test_acha_a_pasta_com_acento_do_mac(biblia_falsa):
+    drive, youtube, raiz, cfg = biblia_falsa
+    pasta = drive.achar(raiz, "Áudios")
+    drive.itens[pasta["id"]]["name"] = unicodedata.normalize("NFD", "Áudios ")   # como o Mac envia
+    assert biblia.rodar(drive, youtube, raiz, cfg, dry_run=True) == 0
