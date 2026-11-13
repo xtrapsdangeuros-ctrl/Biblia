@@ -35,8 +35,7 @@ def _registrar_snippet(snippet: dict) -> None:
     if snippet.get("title"):
         discreto.registrar(snippet["title"], "título")
     discreto.registrar_texto(snippet.get("description"), "descrição")
-    for tag in snippet.get("tags") or []:
-        discreto.registrar(tag, "tag")
+    # As tags não: são palavras comuns ("Shorts", "Bíblia em áudio") e esconderiam o próprio log.
 
 
 class SemPermissao(Exception):

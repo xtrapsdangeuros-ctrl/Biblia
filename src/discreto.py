@@ -510,6 +510,8 @@ def configurar_logging(nivel=logging.INFO) -> None:
     raiz.addHandler(console)
     raiz.addHandler(relatorio)
     raiz.setLevel(nivel)
+    for barulhento in ("httpx", "httpcore", "huggingface_hub", "faster_whisper", "urllib3"):
+        logging.getLogger(barulhento).setLevel(logging.WARNING)   # só ruído no log
 
 
 def texto_relatorio() -> str:
