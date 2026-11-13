@@ -1,0 +1,140 @@
+name: Publicar audiolivro
+
+on:
+  schedule:
+    # Fora do horário cheio (o GitHub atrasa ou pula tarefas marcadas às :00). A segunda é reserva:
+    # se a primeira já publicou, o limite diário faz ela só completar o que faltou.
+    - cron: "17 11 * * *"   # 08:17 em Brasília
+    - cron: "43 15 * * *"   # 12:43 em Brasília (reserva)
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (Settings > Environments), ex.: canal-1; vazio = todos os da variável CANAIS"
+        type: string
+        default: ""
+      dry_run:
+        description: "Só testar (gera o vídeo, não envia)"
+        type: boolean
+        default: false
+      livro:
+        description: "Número do livro no log (ex.: 3) ou nome exato da pasta (vazio = fila normal)"
+        type: string
+        default: ""
+      capitulo:
+        description: "Número do capítulo (precisa do livro; vazio = próximo da fila)"
+        type: string
+        default: ""
+      atualizar_livro:
+        description: "Só reaplicar a ficha nos vídeos já publicados deste livro (número do livro no log ou trecho do nome)"
+        type: string
+        default: ""
+
+# Só leitura do código: os workflows não alteram o repositório.
+permissions:
+  contents: read
+
+
+jobs:
+  rodar:
+    name: ${{ matrix.canal }}
+    strategy:
+      fail-fast: false   # um canal com problema não impede o outro
+      matrix:
+        canal: ${{ fromJSON(inputs.canal && format('["{0}"]', inputs.canal) || vars.CANAIS || '["canal-1"]') }}
+    environment: ${{ matrix.canal }}
+    concurrency:
+      group: audiolivro-${{ matrix.canal }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    # Trava de segurança: um dia normal leva uns 45 min (o plano grátis do GitHub dá 2.000 min por mês).
+    timeout-minutes: 90
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar ffmpeg e fontes
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg fonts-dejavu-core
+
+      - name: Instalar dependências
+        run: pip install -q -r requirements.txt
+
+      - name: Cache do modelo de voz
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-${{ hashFiles('config.yaml') }}
+
+      - name: Reaplicar a ficha nos vídeos já publicados
+        if: inputs.atualizar_livro != ''
+        # O nome do livro é lido do evento pelo próprio robô ("@entrada:..."), para não aparecer no log.
+        run: python src/atualizar.py --livro "@entrada:atualizar_livro" --forcar
+
+      # Na execução de reserva (12:43) estes dois passos são pulados para gastar menos minutos.
+      - name: Procurar capas que faltam
+        if: inputs.atualizar_livro == '' && github.event.schedule != '43 15 * * *'
+        continue-on-error: true
+        env:
+          GOOGLE_BOOKS_API_KEY: ${{ secrets.GOOGLE_BOOKS_API_KEY }}
+          GOOGLE_TTS_API_KEY: ${{ secrets.GOOGLE_TTS_API_KEY }}
+        run: python src/capas.py
+
+      - name: Trocar miniaturas dos vídeos que saíram sem capa
+        if: inputs.atualizar_livro == '' && inputs.dry_run != true && github.event.schedule != '43 15 * * *'
+        continue-on-error: true
+        run: python src/miniaturas.py
+
+      - name: Publicar capítulo do dia
+        id: publicar
+        if: inputs.atualizar_livro == ''
+        env:
+          CAPITULO: ${{ inputs.capitulo }}
+        run: |
+          args=(--livro "@entrada:livro")
+          [ "${{ inputs.dry_run }}" = "true" ] && args+=(--dry-run)
+          [ -n "$CAPITULO" ] && args+=(--capitulo "$CAPITULO")
+          python src/main.py "${args[@]}"
+
+      # Rápido (poucos minutos): vem antes dos extras, que podem demorar horas.
+      - name: Continuar a correção de SEO aprovada
+        if: "!cancelled() && inputs.atualizar_livro == '' && inputs.dry_run != true && inputs.capitulo == '' && steps.publicar.outputs.ja_feito != 'true'"
+        continue-on-error: true
+        timeout-minutes: 20
+        run: python src/corrigir_seo.py --continuar
+
+      - name: Extras (livro completo, legendas e Shorts)
+        if: "!cancelled() && inputs.atualizar_livro == '' && inputs.dry_run != true && inputs.capitulo == '' && steps.publicar.outputs.ja_feito != 'true'"
+        continue-on-error: true
+        timeout-minutes: 30
+        run: python src/extras.py
+
+      # Desligado no config.yaml (criticas.ativo: false): sai em 1 segundo, sem conectar a nada.
+      - name: Críticas com o NotebookLM (vídeo vertical)
+        if: "!cancelled() && inputs.atualizar_livro == '' && inputs.dry_run != true && inputs.capitulo == '' && steps.publicar.outputs.ja_feito != 'true'"
+        continue-on-error: true
+        timeout-minutes: 12
+        run: python src/criticas.py
+
+      # Na execução de reserva (o dia já foi feito pela primeira), os passos pesados abaixo são pulados.
+      # O corte roda por último: um arquivo enorme pode travar a máquina, e isso não pode impedir a publicação.
+      # Os capítulos cortados hoje entram na fila a partir de amanhã.
+      - name: Cortar arquivos com vários capítulos
+        if: "!cancelled() && inputs.atualizar_livro == '' && inputs.capitulo == '' && steps.publicar.outputs.ja_feito != 'true'"
+        id: cortar
+        continue-on-error: true
+        timeout-minutes: 30
+        run: python src/cortar.py --drive
+
+      - name: Avisar se algum corte foi barrado
+        if: steps.cortar.outcome == 'failure'
+        run: |
+          echo "::error::Um arquivo não pôde ser cortado com segurança. Veja o arquivo 'ERRO - ...txt' na pasta do livro no Drive."
+          exit 1

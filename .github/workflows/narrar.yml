@@ -1,0 +1,57 @@
+name: Narrar livros
+
+on:
+  schedule:
+    - cron: "23 5 * * *"   # 02:23 em Brasília (fora do horário cheio, que o GitHub costuma atrasar)
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (Settings > Environments), ex.: canal-1; vazio = todos os da variável CANAIS"
+        type: string
+        default: ""
+      dry_run:
+        description: "Só mostrar o que narraria (não gasta a cota do Google)"
+        type: boolean
+        default: false
+
+# Fila própria: a narração só grava MP3 em capitulos/ e o narracao.json, nunca o publicados.json.
+# Se usasse a mesma fila da publicação, um atraso aqui fazia o GitHub descartar a publicação das 9h.
+# Só leitura do código: os workflows não alteram o repositório.
+permissions:
+  contents: read
+
+
+jobs:
+  narrar:
+    name: ${{ matrix.canal }}
+    strategy:
+      fail-fast: false   # um canal com problema não impede o outro
+      matrix:
+        canal: ${{ fromJSON(inputs.canal && format('["{0}"]', inputs.canal) || vars.CANAIS || '["canal-1"]') }}
+    environment: ${{ matrix.canal }}
+    concurrency:
+      group: narracao-${{ matrix.canal }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45   # a narração para sozinha em 30 min (config.yaml) e continua no dia seguinte
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
+      GOOGLE_TTS_API_KEY: ${{ secrets.GOOGLE_TTS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Instalar ffmpeg
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+      - name: Instalar dependências
+        run: pip install -q google-api-python-client google-auth pyyaml pillow
+      - name: Narrar
+        run: |
+          args=()
+          [ "${{ inputs.dry_run }}" = "true" ] && args+=(--dry-run)
+          python src/narrar.py "${args[@]}"

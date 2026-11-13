@@ -1,0 +1,47 @@
+name: Capas agora
+
+# Procura no Google Livros a capa dos livros que não têm imagem na pasta e troca a miniatura dos vídeos
+# que já saíram sem capa. A execução diária também faz isso; este botão é para não esperar até amanhã.
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (Settings > Environments), ex.: canal-1"
+        type: string
+        default: "canal-1"
+
+# Fila própria: só grava capa.jpg e miniaturas.json, nunca o publicados.json.
+# Só leitura do código: os workflows não alteram o repositório.
+permissions:
+  contents: read
+
+
+jobs:
+  capas:
+    environment: ${{ inputs.canal || 'canal-1' }}
+    concurrency:
+      group: capas-${{ inputs.canal || 'canal-1' }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
+      GOOGLE_BOOKS_API_KEY: ${{ secrets.GOOGLE_BOOKS_API_KEY }}
+      GOOGLE_TTS_API_KEY: ${{ secrets.GOOGLE_TTS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Instalar fontes e dependências
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q fonts-dejavu-core
+          pip install -q -r requirements.txt
+      - name: Procurar capas que faltam
+        run: python src/capas.py
+      - name: Trocar miniaturas dos vídeos sem capa
+        run: python src/miniaturas.py

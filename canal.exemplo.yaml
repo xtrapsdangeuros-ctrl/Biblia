@@ -1,0 +1,43 @@
+# Modelo do canal.yaml: tudo o que é do SEU canal e não deve ficar no código (que pode ser público).
+# Copie este arquivo, preencha e salve como "canal.yaml" na pasta raiz do Google Drive (a mesma do segredo
+# DRIVE_PASTA_RAIZ, ao lado das pastas dos livros). O robô lê no começo de cada execução e o que estiver aqui vale
+# por cima do config.yaml. Campos que você não precisar podem ser apagados.
+
+# Chamadas para o público. "topo" vai logo abaixo do título na descrição (aparece na busca), "fim" no final;
+# {canal} vira o link de inscrição.
+cta:
+  canal: "https://www.youtube.com/@SEU_CANAL?sub_confirmation=1"
+  topo: "📚 Nome do Canal: um capítulo novo todo dia. 🔔 Inscreva-se e ative o sininho."
+  fim:
+    - "👉 Inscreva-se: {canal}"
+    - "👍 Gostou? Deixe seu like e comente o que está achando da história."
+    - "📚 Salve a playlist para continuar de onde parou."
+
+# Frase escrita na imagem do vídeo (vazio = sem frase) e cores da arte.
+video:
+  cta: "Nome do Canal  •  Inscreva-se e ative o sininho"
+  cor_fundo: "#14161c"
+  cor_texto: "#f4f1ea"
+  cor_destaque: "#f2b84b"
+
+publicacao:
+  # Livros que o robô NÃO publica (trecho do nome da pasta). Ex.: já estavam no canal antes do robô.
+  pausados: []
+  # Quais livros publicar, nesta ordem (trecho do nome da pasta). Lista vazia = todos os livros prontos.
+  livros: []
+  categoria_id: "27"   # 27 = Educação (22 = Pessoas e blogs, 24 = Entretenimento)
+  idioma: pt-BR
+
+seo:
+  # IDs de vídeos cujo título nunca muda na correção de SEO (o trecho depois de "watch?v=").
+  titulos_protegidos: []
+
+metadados:
+  # Autores que costumam vir grudados no nome da pasta ("Autor Exemplo Título do Livro").
+  autores_conhecidos: []
+  # Erros de digitação conhecidos nos nomes das pastas (errado: certo).
+  correcoes: {}
+  # Séries que aparecem nos títulos antigos sem o autor (trecho do título em minúsculas: autor).
+  autor_da_serie: {}
+  # Seções que não são capítulo e devem aparecer só com o nome (ex.: um apêndice com nome próprio).
+  secoes_especiais: []

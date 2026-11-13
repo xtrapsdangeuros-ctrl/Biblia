@@ -1,0 +1,74 @@
+name: Extras agora
+
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (Settings > Environments), ex.: canal-1"
+        type: string
+        default: "canal-1"
+      o_que:
+        description: "O que fazer"
+        type: choice
+        options: [shorts, legendas, completo]
+        default: shorts
+      livro:
+        description: "Número do livro no log (ex.: 3) ou trecho do nome da pasta (vazio = todos)"
+        type: string
+        default: ""
+      quantos:
+        description: "Quantos fazer agora"
+        type: string
+        default: "3"
+      previa:
+        description: "Só prévia: Shorts vão para o Drive (Prévias de Shorts), sem YouTube e sem gastar cota"
+        type: boolean
+        default: true
+
+# Só leitura do código: os workflows não alteram o repositório.
+permissions:
+  contents: read
+
+
+jobs:
+  extras:
+    environment: ${{ inputs.canal || 'canal-1' }}
+    concurrency:
+      group: audiolivro-${{ inputs.canal || 'canal-1' }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar ffmpeg e fontes
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg fonts-dejavu-core
+
+      - name: Instalar dependências
+        run: pip install -q -r requirements.txt
+
+      - name: Cache do modelo de voz
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-${{ hashFiles('config.yaml') }}
+
+      - name: Rodar
+        env:
+          O_QUE: ${{ inputs.o_que }}
+          QUANTOS: ${{ inputs.quantos }}
+        # As prévias vão só para o Drive (Prévias de Shorts): nada de artifact, que fica baixável.
+        run: |
+          args=(--so "$O_QUE" --quantos "$QUANTOS" --livro "@entrada:livro")
+          [ "${{ inputs.previa }}" = "true" ] && args+=(--previa)
+          python src/extras.py "${args[@]}"

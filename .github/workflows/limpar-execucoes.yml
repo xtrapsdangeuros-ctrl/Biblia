@@ -1,0 +1,45 @@
+name: Apagar execuções antigas
+
+# Apaga as execuções (e os logs) deste repositório com mais de N dias (padrão: 3). Num repositório público
+# qualquer pessoa lê os logs; mesmo com o modo discreto, quanto menos ficar guardado, melhor.
+# O relatório completo de cada dia fica no Drive (pasta "Relatórios do robô").
+on:
+  schedule:
+    - cron: "37 3 * * *"   # 00:37 em Brasília
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: "Apagar execuções com mais de quantos dias"
+        type: string
+        default: "3"
+
+# Esta tarefa só pode mexer nas execuções do próprio repositório.
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: limpar-execucoes
+  cancel-in-progress: false
+
+jobs:
+  limpar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Apagar execuções e logs antigos
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIAS: ${{ inputs.dias || '3' }}
+        run: |
+          case "$DIAS" in ''|*[!0-9]*) echo "::error::'dias' precisa ser um número"; exit 1 ;; esac
+          limite=$(date -u -d "$DIAS days ago" +%Y-%m-%dT%H:%M:%SZ)
+          echo "Apagando execuções terminadas antes de $limite (mais de $DIAS dias)."
+          ids=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?status=completed&per_page=100&created=<$limite" \
+                  --jq '.workflow_runs[].id')
+          total=0
+          for id in $ids; do
+            [ "$id" = "$GITHUB_RUN_ID" ] && continue
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$id" --silent && total=$((total + 1))
+          done
+          echo "Execuções apagadas: $total"

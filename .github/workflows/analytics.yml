@@ -1,0 +1,48 @@
+name: Analytics do canal
+
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (Settings > Environments), ex.: canal-1"
+        type: string
+        default: "canal-1"
+      dias:
+        description: "Quantos dias olhar para trás"
+        type: string
+        default: "28"
+      buscas:
+        description: "SEO: quantas buscas no YouTube (cada uma gasta 100 da cota de 10.000/dia; 0 = nenhuma)"
+        type: string
+        default: "6"
+
+# Só leitura do código: os workflows não alteram o repositório.
+permissions:
+  contents: read
+
+jobs:
+  analytics:
+    environment: ${{ inputs.canal || 'canal-1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}   # o relatório vai para o Drive, não para o log
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install -q google-api-python-client google-auth pyyaml
+
+      - name: Gerar relatório
+        run: python src/analytics.py --dias "${{ inputs.dias || '28' }}"
+
+      - name: Auditoria de SEO
+        if: always()
+        run: python src/seo.py --buscas "${{ inputs.buscas || '6' }}"

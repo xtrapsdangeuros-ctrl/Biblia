@@ -1,0 +1,58 @@
+name: SEO - corrigir vídeos publicados
+
+# 1) Rode com "previa": monta a lista de mudanças e salva no relatório do Drive (pasta "Relatórios do robô").
+#    NADA muda no YouTube.
+# 2) Leu e aprovou? Rode com "aplicar": aprova a lista e já faz as primeiras mudanças.
+#    Depois disso, o robô diário continua a lista sozinho, um pouco por dia, até acabar.
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (Settings > Environments), ex.: canal-1"
+        type: string
+        default: "canal-1"
+      o_que:
+        description: "previa = só mostrar a lista; aplicar = aprovar a lista e começar"
+        type: choice
+        options: [previa, aplicar]
+        default: previa
+      quantos:
+        description: "Quantas mudanças fazer agora (só no aplicar; cada uma gasta 50 da cota)"
+        type: string
+        default: "40"
+
+# Só leitura do código: os workflows não alteram o repositório.
+permissions:
+  contents: read
+
+
+jobs:
+  seo:
+    environment: ${{ inputs.canal || 'canal-1' }}
+    concurrency:
+      group: audiolivro-${{ inputs.canal || 'canal-1' }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências
+        run: pip install -q google-api-python-client google-auth pyyaml pillow
+      - name: Corrigir SEO
+        env:
+          O_QUE: ${{ inputs.o_que }}
+          QUANTOS: ${{ inputs.quantos }}
+        run: |
+          if [ "$O_QUE" = "aplicar" ]; then
+            python src/corrigir_seo.py --aplicar --max "$QUANTOS"
+          else
+            python src/corrigir_seo.py --previa
+          fi

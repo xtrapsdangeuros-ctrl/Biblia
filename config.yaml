@@ -1,0 +1,110 @@
+# Configuração geral do robô de audiolivros (genérica: serve para qualquer canal).
+# O ID da pasta raiz do Drive vem do segredo DRIVE_PASTA_RAIZ (não precisa colocar aqui).
+# O que é do canal (textos, link, livros pausados, vídeos protegidos, cores) fica no arquivo canal.yaml, na pasta
+# raiz do Drive. Ele é lido no começo de cada execução e vale por cima deste arquivo. Modelo: canal.exemplo.yaml.
+
+publicacao:
+  # Quantos vídeos por dia (cada vídeo pode ter vários capítulos; veja minutos_por_video).
+  capitulos_por_dia: 12   # era 20; baixado para sobrar cota do YouTube para legendas e SEO
+  # Vídeos longos: junta capítulos seguidos do mesmo livro até mais ou menos este tempo, sem cortar capítulo.
+  # A descrição ganha os tempos de cada capítulo (o YouTube vira capítulos clicáveis). 0 = um capítulo por vídeo.
+  minutos_por_video: 120
+  # alternado = um capítulo de cada livro por vez (vários livros andando juntos);
+  # sequencial = termina um livro antes de começar o próximo.
+  modo: alternado
+  # Quais livros publicar, nesta ordem (basta um pedaço do nome da pasta).
+  # Lista vazia ([]) = todos os livros prontos, na ordem de série e volume.
+  livros: []
+  # Livros que o robô NÃO publica (trecho do nome da pasta). Ex.: já estavam no canal antes do robô.
+  pausados: []   # vem do canal.yaml
+  # A privacidade é definida por livro, na ficha (privacidade: private | unlisted | public).
+  # Sem ficha, ou com licenca uso_pessoal, o livro é SEMPRE privado.
+  categoria_id: "27"          # 27 = Educação (22 = Pessoas e blogs, 24 = Entretenimento)
+  idioma: pt-BR
+  # Título: "AUDIOLIVRO NOME DO LIVRO – CAP. 3 | Autor" (padrão de SEO aprovado em 03/11/2026, em src/metadados.py)
+
+# Chamadas para o público (texto e link do canal): ficam no canal.yaml, fora do código. Veja canal.exemplo.yaml.
+cta: {}
+
+# Correção de SEO dos vídeos já publicados (src/corrigir_seo.py). Cada mudança gasta 50 unidades da cota.
+seo:
+  mudancas_por_dia: 40              # 40 x 50 = 2.000 unidades por dia (sobra cota para publicar e legendar)
+  proteger_titulo_acima_de_views: 1000   # vídeo com mais views que isso nunca tem o título trocado
+  comentar_playlist: true           # comenta o link da playlist em cada vídeo público (fixar é à mão no Studio)
+  titulos_protegidos: []   # IDs de vídeos cujo título nunca muda: vêm do canal.yaml
+
+video:
+  cta: ""   # frase escrita na imagem do vídeo: vem do canal.yaml (vazio = sem frase)
+  # Copia o som como está (MP3/AAC) em vez de converter: o vídeo fica pronto ~4x mais rápido (menos minutos do
+  # GitHub) e o arquivo fica menor. Se o YouTube recusar algum vídeo, troque para false.
+  copiar_audio: true
+  largura: 1920
+  altura: 1080
+  cor_fundo: "#14161c"
+  cor_texto: "#f4f1ea"
+  cor_destaque: "#f2b84b"
+
+corte:
+  # Modelo de reconhecimento de voz: tiny, base, small (recomendado), medium.
+  modelo_whisper: small
+  palavra_capitulo: capítulo
+  pausa_antes_do_marcador_seg: 1.5   # o narrador para antes de dizer "Capítulo N"
+  min_capitulo_seg: 60               # capítulo menor que isso = provável erro de detecção
+  max_intro_seg: 180                 # tempo máximo antes do primeiro capítulo detectado
+  max_arquivos_por_execucao: 1
+  # O arquivo grande é transcrito em pedaços e continua no dia seguinte. Era 95; baixado para caber nos
+  # 2.000 minutos grátis do GitHub por mês (um arquivo de 5 h leva uns 8 dias para ser cortado).
+  minutos_maximos: 12
+
+extras:
+  # Rodam DEPOIS dos capítulos do dia, com o que sobrar da cota do YouTube.
+  ativo: true
+  livro_completo: true          # quando todos os capítulos de um livro saírem, junta tudo em vídeos longos
+  horas_por_parte: 11           # o YouTube aceita até 12 h por vídeo (canal verificado)
+  partes_completo_por_dia: 1
+  legendas_por_dia: 12          # cada legenda custa 400 unidades da cota (o envio de vídeo quase não gasta mais)
+  minutos_legendas_shorts: 8    # tempo para legendas e Shorts; o resto de minutos_maximos vai para o livro completo
+  shorts_por_dia: 3
+  apenas_publicos: false        # true = extras só para livros públicos
+  # Tempo máximo dos extras por dia. Era 150; baixado para caber nos 2.000 minutos grátis do GitHub por mês.
+  # A transcrição fica salva aos pedaços, então as legendas andam um pouco por dia.
+  minutos_maximos: 15
+
+# Críticas polêmicas em vídeo vertical, com áudio do NotebookLM (veja "COMO FAZER.txt" em Audiolivros/Críticas).
+# O robô sugere os capítulos; você gera o áudio no NotebookLM e solta na pasta; o robô publica.
+# DESLIGADO até você ligar (ativo: true). Ligado, é um passo curto da publicação diária: não abre outra máquina
+# no GitHub Actions e só usa as transcrições que as legendas já salvaram (transcrever_por_execucao: 0).
+criticas:
+  ativo: false
+  sugestoes_por_execucao: 3     # pastas novas em "Críticas/A fazer" a cada dia (no máximo uma por livro)
+  nota_minima: 8                # quanto maior, mais exigente com o "potencial de polêmica"
+  publicar_por_dia: 2
+  apenas_publicos: true         # só sugere capítulos de livros públicos ou não listados
+  transcrever_por_execucao: 0   # capítulos sem transcrição que ele transcreve por dia só para dar nota (gasta minutos)
+  minutos_maximos: 10           # tempo máximo por dia (cada vídeo leva 1 a 2 min para transcrever e montar)
+  limite_segundos: 175          # o YouTube só trata como Short vídeo vertical de até 3 min
+  acima_do_limite: cortar       # cortar = corta no último fim de frase que cabe; inteiro = publica tudo (vira vídeo comum)
+  # Texto colado na personalização da visão geral em áudio (formato Debate). O robô preenche {livro}, {autor},
+  # {capitulo}, {tema}, {personagens}, e escolhe a briga pelo tema principal: {lado_a}, {lado_b}, {pergunta}
+  # (lista em src/criticas.py > BRIGAS). Dar a briga pronta é o que tira os apresentadores do "os dois têm razão".
+  prompt: |
+    Short de no máximo 2 minutos sobre {capitulo} de "{livro}", de {autor}. Português do Brasil. Ritmo de briga de bar, não de aula: frases curtas, interrupções, provocações.
+
+    ABERTURA (10 segundos): comecem no meio de uma discussão absurda sem nada a ver com o livro (inventem uma; não citem séries nem desenhos) e deixem ela derrapar até {tema}.
+
+    A BRIGA, sem juiz e sem acordo:
+    - Apresentador 1 defende até o fim: "{lado_a}"
+    - Apresentador 2 defende até o fim: "{lado_b}"
+    Cada um prova o seu lado com uma cena ou fala concreta do capítulo, com nomes ({personagens}), e ataca a prova do outro. Proibido resumir o capítulo, explicar o contexto, dizer "os dois têm razão" ou "depende do ponto de vista".
+
+    FINAL: terminem brigados e perguntem direto para quem assiste: "{pergunta}" Comenta aí.
+
+    Só vale o que está no capítulo; não inventem fatos do livro nem do autor. A briga é sobre as personagens, nunca sobre grupos de pessoas reais.
+
+narracao:
+  # Livros com "narrar: true" na ficha e um .epub na pasta são lidos por voz sintética do Google.
+  voz: pt-BR-Chirp3-HD-Achernar
+  idioma: pt-BR
+  # O Google dá 1.000.000 de caracteres grátis por mês nas vozes Chirp3-HD; deixamos folga.
+  caracteres_por_mes: 850000
+  minutos_maximos: 30   # era 240; o limite de caracteres do mês continua o mesmo, só espalha o trabalho

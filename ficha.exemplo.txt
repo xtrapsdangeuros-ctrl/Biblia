@@ -1,0 +1,31 @@
+# Ficha do livro. Copie este arquivo para a pasta do livro no Drive com o nome "ficha.txt"
+# (ou crie um Documento Google chamado "ficha" com este mesmo conteúdo).
+# Linhas que começam com # são comentários e são ignoradas.
+
+titulo: Título do Livro
+autor: Nome do Autor
+narrador: Seu Nome
+
+# uso_pessoal      -> cópia só para você ouvir (sempre privado; é o padrão sem ficha)
+# dominio_publico  -> obra cujos direitos expiraram (exige o campo fonte_texto)
+# proprio          -> você é o autor ou tem a licença para publicar
+licenca: dominio_publico
+fonte_texto: "Texto da edição de 1900, em domínio público"
+# detentor_direitos: "Editora X"   # só para licenca: proprio, se não for o próprio autor
+
+descricao: "Uma frase sobre a história, sem contar o final."
+tags: [literatura, clássicos]
+hashtags: [audiolivro]
+
+# Quem pode ver os vídeos: private (só você), unlisted (quem tiver o link) ou public.
+# public/unlisted só funcionam com licenca dominio_publico ou proprio. Sem ficha = private.
+privacidade: public
+
+# true se a narração foi feita com voz de inteligência artificial (o YouTube exige avisar)
+voz_sintetica: false
+
+# Opcional: ajuda o robô a conferir o corte automático
+total_capitulos: 30
+
+# false pausa a publicação deste livro
+ativo: true

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+saida_teste/
+client_secret*.json
+token*.json
+.env
+
+# Dados do canal: ficam no Drive, nunca aqui
+canal.yaml
+Relatórios do robô/

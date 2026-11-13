@@ -1,0 +1,77 @@
+name: Testar vozes
+
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (Settings > Environments), ex.: canal-1"
+        type: string
+        default: "canal-1"
+      piper:
+        description: "Piper (grátis)"
+        type: boolean
+        default: true
+      kokoro:
+        description: "Kokoro (grátis, uso comercial liberado)"
+        type: boolean
+        default: true
+      google:
+        description: "Google Cloud (cota grátis; precisa do segredo GOOGLE_TTS_API_KEY)"
+        type: boolean
+        default: true
+      xtts:
+        description: "XTTS (só para ouvir: licença não comercial)"
+        type: boolean
+        default: true
+
+# Só leitura do código: os workflows não alteram o repositório.
+permissions:
+  contents: read
+
+jobs:
+  vozes:
+    environment: ${{ inputs.canal || 'canal-1' }}
+    name: ${{ matrix.motor }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        motor: [piper, kokoro, google, xtts]
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
+      GOOGLE_TTS_API_KEY: ${{ secrets.GOOGLE_TTS_API_KEY }}
+      PEDIDO: ${{ inputs[matrix.motor] }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.PEDIDO == 'true'
+
+      - uses: actions/setup-python@v5
+        if: env.PEDIDO == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar programas
+        if: env.PEDIDO == 'true'
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg espeak-ng
+
+      - name: Instalar o motor de voz
+        if: env.PEDIDO == 'true'
+        run: |
+          pip install -q google-api-python-client google-auth pyyaml
+          case "${{ matrix.motor }}" in
+            piper)  pip install piper-tts ;;
+            kokoro) pip install torch --index-url https://download.pytorch.org/whl/cpu
+                    pip install kokoro soundfile ;;
+            xtts)   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+                    pip install coqui-tts "transformers>=4.57,<5" ;;
+          esac
+
+      - name: Narrar
+        if: env.PEDIDO == 'true'
+        # Os MP3 vão só para o Drive (Audiolivros › Testes de voz): nada de artifact.
+        run: python scripts/testar_vozes.py --motor ${{ matrix.motor }} --saida testes_de_voz

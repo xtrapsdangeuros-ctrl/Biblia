@@ -1,0 +1,34 @@
+name: SEO - exportar vídeos (só leitura)
+
+# Lê título, descrição e tags de todos os vídeos e salva no relatório do Drive (pasta "Relatórios do robô").
+# Não altera nada no YouTube. Nada vai para o log nem para artifacts.
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (Settings > Environments), ex.: canal-1"
+        type: string
+        default: "canal-1"
+
+# Só leitura do código: os workflows não alteram o repositório.
+permissions:
+  contents: read
+
+jobs:
+  exportar:
+    environment: ${{ inputs.canal || 'canal-1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q google-api-python-client google-auth pyyaml
+      - name: Exportar
+        run: python src/seo.py --buscas 0 --exportar videos.json
