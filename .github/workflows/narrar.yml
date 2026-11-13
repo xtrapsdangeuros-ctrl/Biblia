@@ -24,6 +24,8 @@ permissions:
 jobs:
   narrar:
     name: ${{ matrix.canal }}
+    # Só roda sozinho depois que a variável CANAIS existir (canal configurado); à mão, com o campo canal.
+    if: vars.CANAIS != '' || inputs.canal != ''
     strategy:
       fail-fast: false   # um canal com problema não impede o outro
       matrix:

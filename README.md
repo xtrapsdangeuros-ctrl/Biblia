@@ -153,8 +153,8 @@ autorização nem segredos. No log e no repositório os canais só aparecem como
    segredos da tabela do passo 2.4 (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`,
    `DRIVE_PASTA_RAIZ` e, se usar, `GOOGLE_TTS_API_KEY` e `GOOGLE_BOOKS_API_KEY`), com os valores **daquele** canal.
 3. **Quais canais rodam sozinhos:** em Settings > Secrets and variables > Actions > aba **Variables** >
-   **New repository variable**, crie `CANAIS` com a lista, por exemplo `["canal-1","canal-2"]`. Sem essa variável,
-   só o `canal-1` roda.
+   **New repository variable**, crie `CANAIS` com a lista, por exemplo `["canal-1","canal-2"]`. Enquanto essa variável
+   não existir, nada roda sozinho (só à mão, preenchendo o campo **canal**).
 
 A publicação diária e a narração rodam para cada canal da lista, em paralelo (um canal com problema não para o
 outro). Nos botões **Run workflow**, o campo **canal** escolhe qual canal (vazio na publicação = todos da lista).
