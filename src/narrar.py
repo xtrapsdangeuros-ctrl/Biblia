@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from comum import carregar_config, configurar_log, ler_nome_capitulo, log, nome_arquivo_capitulo, normalizar, pausado
+from comum import carregar_config, configurar_log, ler_nome_capitulo, log, nome_arquivo_capitulo, normalizar, pausado, so_audiolivro
 
 ARQ_USO = "narracao.json"
 
@@ -112,6 +112,8 @@ def processar(drive, raiz: str, cfg: dict, dry_run: bool = False) -> int:
 
 def main() -> int:
     configurar_log()
+    if so_audiolivro("Narração"):
+        return 0
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

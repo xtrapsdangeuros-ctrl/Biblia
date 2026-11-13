@@ -25,7 +25,7 @@ from pathlib import Path
 from PIL import Image
 
 import discreto
-from comum import configurar_log, log
+from comum import configurar_log, log, so_audiolivro
 
 ALTURA_MINIMA = 300
 ULTIMOS_ERROS: list[str] = []   # por que a última busca não achou nada (vai para o resumo do GitHub)
@@ -218,6 +218,8 @@ def processar_drive(dry_run: bool) -> int:
 
 def main() -> int:
     configurar_log()
+    if so_audiolivro("Capas"):
+        return 0
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true")
     return processar_drive(parser.parse_args().dry_run)

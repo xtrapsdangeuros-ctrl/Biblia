@@ -15,7 +15,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from comum import carregar_config, configurar_log, log
+from comum import carregar_config, configurar_log, log, so_audiolivro
 
 
 def _quando(texto: str | None) -> datetime:
@@ -92,6 +92,8 @@ def processar(drive, youtube, raiz: str, cfg: dict, dry_run: bool = False) -> in
 
 def main() -> int:
     configurar_log()
+    if so_audiolivro("Miniaturas"):
+        return 0
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

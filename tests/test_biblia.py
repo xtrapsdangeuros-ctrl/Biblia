@@ -1,0 +1,146 @@
+"""Modo Bíblia (src/biblia.py): plano de leitura, títulos e o fluxo com Drive e YouTube falsos."""
+
+import subprocess
+
+import pytest
+
+import biblia
+from biblia import Capitulo, dividir, numero_do_arquivo, ordem_e_nome, referencia
+from test_fluxo import PASTA, DriveFalso
+
+
+def _caps(livro, ordem, numeros, tamanho=100):
+    return [Capitulo(livro, ordem, n, {"id": f"{livro}{n}", "name": f"{n}.mp3", "size": str(tamanho)})
+            for n in numeros]
+
+
+def test_nomes_de_pasta_e_arquivo():
+    assert ordem_e_nome("01 Gênesis") == (1, "Gênesis")
+    assert ordem_e_nome("49 - Efésios") == (49, "Efésios")
+    assert ordem_e_nome("34  Naum") == (34, "Naum")
+    assert ordem_e_nome("09 1 Samuel") == (9, "1 Samuel")
+    assert ordem_e_nome("Artes") is None
+    assert numero_do_arquivo("01ge01.mp3") == 1
+    assert numero_do_arquivo("19sl150.mp3") == 150
+    assert numero_do_arquivo("Gênesis 12.mp3") == 12
+    assert numero_do_arquivo("sem numero.mp3") is None
+
+
+def test_referencia_segue_as_regras_do_titulo():
+    assert referencia(_caps("Gênesis", 1, [1, 2, 3])) == "Gênesis 1, 2 e 3"
+    assert referencia(_caps("Gênesis", 1, [4, 5])) == "Gênesis 4 e 5"
+    assert referencia(_caps("Salmos", 19, [23])) == "Salmo 23"
+    assert referencia(_caps("Salmos", 19, [23, 24, 25, 26, 27])) == "Salmos 23 a 27"
+    assert referencia(_caps("Rute", 8, [4]) + _caps("1 Samuel", 9, [1, 2])) == "Rute 4 e 1 Samuel 1 e 2"
+
+
+def test_divisao_equilibrada_e_em_ordem():
+    caps = _caps("A", 1, range(1, 11), 100) + _caps("B", 2, range(1, 11), 300)
+    dias = dividir(caps, 5)
+    assert len(dias) == 5 and [c for d in dias for c in d] == caps   # nada some nem muda de ordem
+    pesos = [sum(c.tamanho for c in d) for d in dias]
+    assert max(pesos) - min(pesos) <= 300                            # o livro de capítulos grandes rende menos por dia
+    assert dividir(caps[:3], 365) == [[c] for c in caps[:3]]          # menos capítulos que dias
+
+
+def test_titulo_longo_usa_o_modelo_curto():
+    conf = biblia.config({})
+    caps = _caps("Rute", 8, [4]) + _caps("1 Samuel", 9, [1, 2])
+    valores = biblia.campos(conf, 70, 365, caps, None, {})
+    assert biblia.titulo(conf, valores) == "Rute 4 e 1 Samuel 1 e 2 | Bíblia em Áudio | Dia 70 de 365"
+    longo = _caps("1 Tessalonicenses", 52, [1, 2, 3, 4, 5]) + _caps("2 Tessalonicenses", 53, [1, 2, 3])
+    valores = biblia.campos(conf, 330, 365, longo, None, {})
+    assert biblia.titulo(conf, valores) == "1 Tessalonicenses 1 a 5 e 2 Tessalonicenses 1, 2 e 3 | Dia 330 de 365"
+
+
+def test_minutagem_so_com_tres_capitulos_ou_mais():
+    conf = biblia.config({"biblia": {"credito": "Tradução X"}})
+    tres = biblia.campos(conf, 1, 365, _caps("Gênesis", 1, [1, 2, 3]), [0, 300.4, 3725], {})
+    texto = biblia.descricao(conf, tres)
+    assert "00:00 Gênesis 1\n05:00 Gênesis 2\n1:02:05 Gênesis 3" in texto and "Texto bíblico: Tradução X" in texto
+    assert "#BíbliaEmÁudio #Gênesis #BíbliaEm1Ano" in texto
+    dois = biblia.campos(conf, 2, 365, _caps("Gênesis", 1, [4, 5]), [0, 300], {})
+    assert "00:00" not in biblia.descricao(conf, dois)
+
+
+class YouTubeFalso:
+    def __init__(self):
+        self.videos, self.playlists, self.itens, self.atualizados = [], {}, [], []
+
+    def enviar_video(self, video, snippet, status):
+        assert video.exists() and video.stat().st_size > 0
+        self.videos.append((snippet, status))
+        return f"V{len(self.videos)}"
+
+    def definir_miniatura(self, video_id, imagem):
+        assert imagem.exists()
+
+    def criar_playlist(self, titulo, descricao, privacidade="private"):
+        pid = f"PL{len(self.playlists) + 1}"
+        self.playlists[pid] = (titulo, privacidade)
+        return pid
+
+    def adicionar_na_playlist(self, playlist_id, video_id):
+        self.itens.append((playlist_id, video_id))
+
+    def atualizar_metadados(self, video_id, snippet):
+        self.atualizados.append((video_id, snippet))
+
+
+@pytest.fixture
+def biblia_falsa(tmp_path):
+    drive, youtube = DriveFalso(tmp_path), YouTubeFalso()
+    raiz = drive.novo("Canal", None, PASTA)
+    audios = drive.novo("Áudios", raiz, PASTA)
+    for ordem, livro, n in ((1, "01 Gênesis", 4), (40, "40 Mateus", 2)):
+        pasta = drive.novo(livro, audios, PASTA)
+        for c in range(1, n + 1):
+            mp3 = tmp_path / f"{ordem}_{c}.mp3"
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-t", "2", "-i", "sine=frequency=440",
+                            "-c:a", "libmp3lame", str(mp3)], check=True)
+            drive.novo(f"{ordem:02d}xx{c:02d}.mp3", pasta, local=mp3)
+    cfg = {"modo": "biblia", "video": {"largura": 640, "altura": 360, "cor_fundo": "#111111", "cor_texto": "#ffffff",
+                                         "cor_destaque": "#ffcc00", "copiar_audio": True},
+           "publicacao": {"idioma": "pt-BR"}, "cta": {"canal": "https://y/@c"},
+           "biblia": {"dias": 3, "credito": "Tradução Livre", "privacidade": "public"}}
+    return drive, youtube, raiz, cfg
+
+
+def test_fluxo_publica_um_dia_por_vez(biblia_falsa):
+    drive, youtube, raiz, cfg = biblia_falsa
+    assert biblia.rodar(drive, youtube, raiz, cfg) == 0
+    assert biblia.rodar(drive, youtube, raiz, cfg) == 0   # mesmo dia: não publica de novo
+    assert len(youtube.videos) == 1
+    snippet, status = youtube.videos[0]
+    assert snippet["title"].startswith("Gênesis 1") and snippet["title"].endswith("Dia 1 de 3")
+    assert status["privacyStatus"] == "public"
+    assert "https://www.youtube.com/playlist?list=PL1" in snippet["description"]   # links já no 1º envio
+    # dia 1 entra no plano, no Antigo Testamento e no livro
+    assert {youtube.playlists[p][0] for p, v in youtube.itens if v == "V1"} == {
+        "Bíblia em 1 Ano – Leitura Diária (Dia 1 ao 3)", "Antigo Testamento em Áudio – Bíblia Completa",
+        "Gênesis Completo em Áudio – Bíblia Sagrada"}
+
+    estado = drive.ler_json(raiz, biblia.ARQ_ESTADO, {})
+    estado["dias"]["1"]["data"] = "2000-01-01"            # finge que o dia 1 saiu ontem
+    drive.gravar_json(raiz, biblia.ARQ_ESTADO, estado)
+    assert biblia.rodar(drive, youtube, raiz, cfg) == 0
+    assert len(youtube.videos) == 2 and "Dia 2 de 3" in youtube.videos[1][0]["title"]
+    # o vídeo de ontem ganhou o link do de hoje
+    assert youtube.atualizados[-1][0] == "V1" and "https://youtu.be/V2" in youtube.atualizados[-1][1]["description"]
+    assert "Texto bíblico: Tradução Livre" in youtube.videos[1][0]["description"]
+
+
+def test_dia_pedido_e_dry_run(biblia_falsa):
+    drive, youtube, raiz, cfg = biblia_falsa
+    assert biblia.rodar(drive, youtube, raiz, cfg, dry_run=True) == 0 and youtube.videos == []
+    assert biblia.rodar(drive, youtube, raiz, cfg, dia_pedido=3) == 0
+    assert "Mateus" in youtube.videos[0][0]["title"] and "Dia 3 de 3" in youtube.videos[0][0]["title"]
+    assert any(youtube.playlists[p][0].startswith("Novo Testamento") for p, _ in youtube.itens)
+
+
+def test_etapas_de_audiolivro_pulam_no_modo_biblia(monkeypatch):
+    import comum
+    monkeypatch.setattr(comum, "carregar_config", lambda *a, **k: {"modo": "biblia"})
+    assert comum.so_audiolivro("Extras") is True
+    monkeypatch.setattr(comum, "carregar_config", lambda *a, **k: {})
+    assert comum.so_audiolivro("Extras") is False

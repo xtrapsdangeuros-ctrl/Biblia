@@ -28,7 +28,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from comum import carregar_config, configurar_log, eh_audio, log, normalizar, pausado
+from comum import carregar_config, configurar_log, eh_audio, log, normalizar, pausado, so_audiolivro
 from cortar import Palavra
 
 PASTA_CRITICAS = "Críticas"
@@ -545,6 +545,8 @@ def montar_local(args) -> int:
 
 def main() -> int:
     configurar_log()
+    if so_audiolivro("Críticas"):
+        return 0
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--so", choices=["sugerir", "publicar"])
     parser.add_argument("--dry-run", action="store_true")

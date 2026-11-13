@@ -159,6 +159,21 @@ autorização nem segredos. No log e no repositório os canais só aparecem como
 A publicação diária e a narração rodam para cada canal da lista, em paralelo (um canal com problema não para o
 outro). Nos botões **Run workflow**, o campo **canal** escolhe qual canal (vazio na publicação = todos da lista).
 
+## Modo Bíblia (plano "Bíblia em 1 ano")
+Com `modo: biblia` no `canal.yaml`, o robô publica **um dia do plano por vídeo**:
+- **Áudios no Drive:** dentro da pasta raiz, uma pasta com os livros (nome em `biblia > pasta_audios`), uma
+  subpasta por livro com o número na frente (`01 Gênesis`, `40 Mateus`...) e um MP3 por capítulo. O último
+  número do nome do arquivo é o capítulo (`01ge01.mp3` = capítulo 1). Da pasta 40 em diante é o Novo Testamento.
+- **Plano:** os capítulos são divididos em `dias` leituras (padrão 365) de tamanho parecido. O plano fica gravado
+  em `biblia.json` na pasta raiz, junto com o que já foi publicado.
+- **Cada vídeo:** título `Gênesis 1, 2 e 3 | Bíblia em Áudio | Dia 1 de 365` (encurta se passar de 70 letras),
+  descrição pelo modelo do `canal.yaml` (com minutagem quando há 3 capítulos ou mais e o crédito da tradução),
+  miniatura do dia, e entra em 3 playlists: o plano, o Testamento e o livro. O vídeo de ontem ganha o link de hoje.
+- **Run workflow:** o campo **capítulo** vira o **dia** do plano (ex.: `5` publica o Dia 5).
+- As etapas só de audiolivro (corte, capas, extras, críticas, narração, SEO) são puladas nesse canal.
+- `privacidade` (em `biblia`) vale para todos os vídeos. Confirme os direitos da tradução e da gravação antes de
+  usar `public`.
+
 ## Extras
 - **Livro completo, legendas e Shorts** (`config.yaml > extras`): depois dos capítulos do dia, com o que sobrar da
   cota do YouTube. Teste: **Actions > Extras agora** (com "Só prévia", os Shorts vão só para o Drive).

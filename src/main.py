@@ -214,6 +214,9 @@ def rodar_drive(args, cfg: dict) -> int:
     credenciais = credenciais_do_ambiente()
     drive, youtube = Drive(credenciais), YouTube(credenciais)
     raiz = os.environ.get("DRIVE_PASTA_RAIZ") or sys.exit("Falta a variável DRIVE_PASTA_RAIZ")
+    import biblia
+    if biblia.ligado(cfg):   # canal da Bíblia: um dia do plano por vídeo (o campo "capítulo" vira o dia)
+        return biblia.rodar(drive, youtube, raiz, cfg, args.dry_run, args.capitulo, args.quantos)
 
     from google_api import LimiteDiario
 
@@ -349,9 +352,9 @@ def main() -> int:
     parser.add_argument("--ficha", type=Path, help="ficha YAML para o teste local")
     parser.add_argument("--saida", type=Path, help="pasta de saída do teste local")
     args = parser.parse_args()
-    if args.capitulo is not None and not args.livro:
-        parser.error("--capitulo precisa de --livro")
     cfg = carregar_config()
+    if args.capitulo is not None and not args.livro and not str(cfg.get("modo") or "") == "biblia":
+        parser.error("--capitulo precisa de --livro")
     return rodar_local(args, cfg) if args.teste_local else rodar_drive(args, cfg)
 
 

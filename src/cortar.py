@@ -22,7 +22,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from comum import carregar_config, configurar_log, log, nome_arquivo_capitulo
+from comum import carregar_config, configurar_log, log, nome_arquivo_capitulo, so_audiolivro
 from numeros import ler_numero, limpar_token
 from video import duracao_audio
 
@@ -446,6 +446,8 @@ def main() -> int:
     cfg = carregar_config()["corte"]
 
     if args.drive:
+        if so_audiolivro("Corte"):
+            return 0
         return processar_drive(cfg)
     if not args.arquivo:
         parser.error("informe um arquivo ou use --drive")

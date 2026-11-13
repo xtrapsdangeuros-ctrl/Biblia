@@ -15,7 +15,7 @@ import sys
 from datetime import datetime, timezone
 
 import discreto
-from comum import carregar_config, configurar_log, log, normalizar
+from comum import carregar_config, configurar_log, log, normalizar, so_audiolivro
 from metadados import snippet_video
 
 
@@ -92,6 +92,8 @@ def atualizar_livro(drive, youtube, pasta: dict, cfg: dict, dry_run: bool, forca
 
 def main() -> int:
     configurar_log()
+    if so_audiolivro("Reaplicar a ficha"):
+        return 0
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--livro", required=True, type=discreto.resolver,
                         help="número do livro no log, nome da pasta ou um trecho único dele")

@@ -96,6 +96,14 @@ def carregar_config(caminho: Path | None = None, canal: bool = True) -> dict:
     return cfg
 
 
+def so_audiolivro(nome: str) -> bool:
+    """True (e um aviso no log) se o canal está no modo Bíblia: esta etapa é só dos audiolivros e não roda."""
+    if str(carregar_config().get("modo") or "").strip().lower() == "biblia":
+        log.info("%s: não se aplica ao modo Bíblia; pulando.", nome)
+        return True
+    return False
+
+
 def aplicar_canal(cfg: dict) -> None:
     """Marca os textos do canal como sensíveis (modo discreto) e passa listas do canal para os módulos."""
     import discreto

@@ -26,7 +26,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from comum import carregar_config, configurar_log, log
+from comum import carregar_config, configurar_log, log, so_audiolivro
 import metadados
 from metadados import (_corrigir, descricao_playlist, hashtags_video, link_playlist, tags_video, titulo_playlist,
                        titulo_short)
@@ -362,6 +362,8 @@ def aplicar(drive, youtube, raiz: str, cfg: dict, maximo: int, aprovar: bool) ->
 
 def main() -> int:
     configurar_log()
+    if so_audiolivro("Correção de SEO"):
+        return 0
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     modo = parser.add_mutually_exclusive_group(required=True)
     modo.add_argument("--previa", action="store_true", help="monta a lista de mudanças; não altera nada")

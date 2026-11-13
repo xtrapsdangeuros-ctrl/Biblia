@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 import discreto
-from comum import carregar_config, configurar_log, log, normalizar, pausado
+from comum import carregar_config, configurar_log, log, normalizar, pausado, so_audiolivro
 
 
 def _pronto_para_completo(livro, estado: dict) -> bool:
@@ -203,6 +203,8 @@ def rodar_extras(drive, youtube, raiz: str, cfg: dict, livro_filtro: str | None 
 
 def main() -> int:
     configurar_log()
+    if so_audiolivro("Extras"):
+        return 0
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--livro", type=discreto.resolver, help="número do livro no log ou trecho do nome da pasta")
