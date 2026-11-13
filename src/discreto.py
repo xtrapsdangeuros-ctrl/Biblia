@@ -311,6 +311,10 @@ def resumo_erro(erro: BaseException) -> str:
     texto = str(erro).strip()
     if texto and _seguro(texto):
         nome += f" ({texto})"
+    else:   # códigos do Google que ajudam a achar o problema e não dizem nada do canal
+        codigo = re.search(r"\b(invalid_grant|invalid_client|unauthorized_client|invalid_scope|access_denied)\b", texto)
+        if codigo:
+            nome += f" ({codigo.group(1)})"
     return nome
 
 

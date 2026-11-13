@@ -267,3 +267,10 @@ def test_workflow_de_limpeza_apaga_execucoes_antigas():
     assert wf["permissions"]["actions"] == "write"
     assert wf[True]["workflow_dispatch"]["inputs"]["dias"]["default"] == "3"   # o YAML lê "on" como True
     assert "DELETE" in texto and "status=completed" in texto
+
+
+def test_erro_de_autorizacao_mostra_so_o_codigo(modo):
+    class RefreshError(Exception):
+        pass
+    erro = RefreshError("('invalid_client: Unauthorized', {'error': 'invalid_client'})")
+    assert discreto.resumo_erro(erro) == "RefreshError (invalid_client)"
