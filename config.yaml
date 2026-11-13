@@ -106,5 +106,5 @@ narracao:
   voz: pt-BR-Chirp3-HD-Achernar
   idioma: pt-BR
   # O Google dá 1.000.000 de caracteres grátis por mês nas vozes Chirp3-HD; deixamos folga.
-  caracteres_por_mes: 850000
+  caracteres_por_mes: 650000   # a mesma cota grátis de 1 milhão também narra os vídeos animados
   minutos_maximos: 30   # era 240; o limite de caracteres do mês continua o mesmo, só espalha o trabalho
