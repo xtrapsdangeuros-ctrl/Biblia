@@ -193,3 +193,48 @@ def test_textos_da_miniatura():
     assert arte_biblia.textos_do_dia([("Salmos", 23)]) == ("Salmos", "Salmo 23")
     assert arte_biblia.textos_do_dia([("Rute", 4), ("1 Samuel", 1), ("1 Samuel", 2)]) == (
         "Rute · 1 Samuel", "Rute 4 · 1 Samuel 1 e 2")
+
+
+def test_divide_capitulo_em_partes_no_fim_da_frase():
+    from cortar import Palavra
+    from shorts_biblia import dividir_partes
+    palavras, t = [], 0.0
+    for i in range(120):   # 120 frases de 4 s (3 palavras + ponto final): 480 s
+        for j, w in enumerate(["um", "dois", "tres."]):
+            palavras.append(Palavra(w, t, t + 1.2))
+            t += 1.333
+    partes = dividir_partes(palavras, t, 175)
+    assert len(partes) == 3 and partes[0][0] == 0 and abs(partes[-1][1] - t) < 0.01
+    assert all(fim - ini <= 175 for ini, fim in partes)
+    assert max(f - i for i, f in partes) - min(f - i for i, f in partes) < 20   # tamanhos parecidos
+    fins_de_frase = [p.fim for p in palavras if p.texto.endswith(".")]
+    assert all(any(f <= corte <= f + 0.2 for f in fins_de_frase) for _, corte in partes[:-1])
+    assert dividir_partes(palavras[:10], 13.3, 175) == [(0.0, 13.3)]
+
+
+def test_shorts_do_dia(biblia_falsa, tmp_path):
+    from cortar import Palavra
+    import shorts_biblia
+    drive, youtube, raiz, cfg = biblia_falsa
+    assert biblia.rodar(drive, youtube, raiz, cfg) == 0   # publica o dia 1
+    cfg["biblia"]["shorts"] = {"ativo": True, "max_segundos": 1.5, "linha_rodape": "Canal"}
+    falas = lambda cap, audio: [Palavra("Primeira.", 0.1, 0.9), Palavra("Segunda.", 1.0, 1.9)]
+    estado = drive.ler_json(raiz, biblia.ARQ_ESTADO, {})
+    conf = biblia.config(cfg)
+    caps, _ = biblia.capitulos_da_biblia(drive, drive.achar(raiz, "Áudios")["id"])
+    plano = [[c for c in caps if (c.livro, c.numero) in {tuple(x) for x in dia}] for dia in estado["plano"]]
+    n = shorts_biblia.publicar_shorts(drive, youtube, raiz, cfg, conf, plano, estado, transcrever_fn=falas)
+    assert n == 2 * len(plano[0])                                      # 2 partes por capítulo (2 s cada, máx. 1,5 s)
+    shorts = [s for s, _ in youtube.videos if "Bíblia em Áudio" in s["title"] and "–" in s["title"]]
+    assert shorts and "parte 1 de 2" in shorts[0]["title"] and "https://youtu.be/V1" in shorts[0]["description"]
+    assert estado["shorts"]["1"]["completo"] is True
+    assert shorts_biblia.publicar_shorts(drive, youtube, raiz, cfg, conf, plano, estado, transcrever_fn=falas) == 0
+
+
+def test_arte_vertical(tmp_path):
+    from PIL import Image
+    from shorts_biblia import arte_vertical
+    mini = tmp_path / "mini.png"
+    Image.new("RGB", (1280, 720), "#e8d9b5").save(mini)
+    arte = arte_vertical(mini, None, tmp_path / "v.png", 12, "Salmos", 23, 2, 3, "Canal")
+    assert Image.open(arte).size == (1080, 1920)

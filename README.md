@@ -180,6 +180,11 @@ Com `modo: biblia` no `canal.yaml`, o robô publica **um dia do plano por vídeo
   `fundo_video` (imagem durante a leitura), `tela_final` + `tela_final_segundos` (imagem dos últimos segundos) e
   `miniatura: {fundo, linha1, linha2}` (fundo sem texto; o robô escreve "DIA N", o livro e os capítulos). Se o
   modelo da miniatura mudar, os dias já publicados ganham a miniatura nova sozinhos. Fontes em `fontes/` (OFL).
+- **Shorts** (`biblia > shorts > ativo: true`): depois do vídeo do dia, cada capítulo da leitura vira Shorts de até
+  `max_segundos` (padrão 175 s), cortados em fim de frase e com tamanhos parecidos, com legenda grande na tela e o
+  visual das artes. Em média são uns 7 por dia (o log mostra o total do plano). A transcrição de cada capítulo fica
+  na pasta "Transcrições" do Drive e é feita uma vez só. Os Shorts entram na playlist própria e levam na descrição o
+  link da leitura completa do dia. Limite de tempo por execução: `minutos_maximos`; o que faltar sai na próxima.
 - As etapas só de audiolivro (corte, capas, extras, críticas, narração, SEO) são puladas nesse canal.
 - `privacidade` (em `biblia`) vale para todos os vídeos. Confirme os direitos da tradução e da gravação antes de
   usar `public`.

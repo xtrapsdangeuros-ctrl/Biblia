@@ -515,7 +515,6 @@ def rodar(drive, youtube, raiz: str, cfg: dict, dry_run: bool = False, dia_pedid
         pendentes = [d for d in range(1, len(plano) + 1) if d not in feitos][:max(0, limite)]
         if not pendentes:
             log.info("Bíblia: nada para publicar agora (o dia de hoje já saiu ou o plano terminou).")
-            return 0
     for dia in pendentes:
         if not 1 <= dia <= len(plano):
             log.error("Dia %d fora do plano (1 a %d).", dia, len(plano))
@@ -525,4 +524,15 @@ def rodar(drive, youtube, raiz: str, cfg: dict, dry_run: bool = False, dia_pedid
         except LimiteDiario as motivo:
             log.warning("Limite diário do YouTube (%s); continua amanhã.", motivo)
             return 0
+    # Shorts: a leitura dos dias já publicados também em vídeos verticais (canal.yaml > biblia > shorts)
+    import shorts_biblia
+    sconf = shorts_biblia.config(conf)
+    if sconf.get("ativo"):
+        total, media = shorts_biblia.estimativa(plano, float(sconf["max_segundos"]))
+        log.info("Shorts: cerca de %d no plano (média de %.1f por dia).", total, media)
+        try:
+            feitos = shorts_biblia.publicar_shorts(drive, youtube, raiz, cfg, conf, plano, estado, dry_run)
+            log.info("Shorts publicados nesta execução: %d", feitos)
+        except LimiteDiario as motivo:
+            log.warning("Limite diário do YouTube nos Shorts (%s); continua amanhã.", motivo)
     return 0
