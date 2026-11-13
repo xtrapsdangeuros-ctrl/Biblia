@@ -176,6 +176,10 @@ Com `modo: biblia` no `canal.yaml`, o robô publica **um dia do plano por vídeo
   descrição pelo modelo do `canal.yaml` (com minutagem quando há 3 capítulos ou mais e o crédito da tradução),
   miniatura do dia, e entra em 3 playlists: o plano, o Testamento e o livro. O vídeo de ontem ganha o link de hoje.
 - **Run workflow:** o campo **capítulo** vira o **dia** do plano (ex.: `5` publica o Dia 5).
+- **Artes do canal** (caminhos no Drive a partir da pasta raiz, no bloco `biblia` do `canal.yaml`):
+  `fundo_video` (imagem durante a leitura), `tela_final` + `tela_final_segundos` (imagem dos últimos segundos) e
+  `miniatura: {fundo, linha1, linha2}` (fundo sem texto; o robô escreve "DIA N", o livro e os capítulos). Se o
+  modelo da miniatura mudar, os dias já publicados ganham a miniatura nova sozinhos. Fontes em `fontes/` (OFL).
 - As etapas só de audiolivro (corte, capas, extras, críticas, narração, SEO) são puladas nesse canal.
 - `privacidade` (em `biblia`) vale para todos os vídeos. Confirme os direitos da tradução e da gravação antes de
   usar `public`.

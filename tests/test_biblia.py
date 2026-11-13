@@ -152,3 +152,44 @@ def test_acha_a_pasta_com_acento_do_mac(biblia_falsa):
     pasta = drive.achar(raiz, "Áudios")
     drive.itens[pasta["id"]]["name"] = unicodedata.normalize("NFD", "Áudios ")   # como o Mac envia
     assert biblia.rodar(drive, youtube, raiz, cfg, dry_run=True) == 0
+
+
+def test_usa_as_artes_do_canal_e_a_tela_final(biblia_falsa, tmp_path):
+    from PIL import Image
+    from video import duracao_audio
+    drive, youtube, raiz, cfg = biblia_falsa
+    artes = drive.novo("Artes", raiz, PASTA)
+    for nome, tam in (("fundo.png", (1920, 1080)), ("mini.png", (1280, 720)), ("tela.png", (1920, 1080))):
+        arq = tmp_path / nome
+        Image.new("RGB", tam, "#e8d9b5").save(arq)
+        drive.novo(nome, artes, "image/png", local=arq)
+    cfg["biblia"].update(fundo_video="Artes/fundo.png", tela_final="Artes/tela.png", tela_final_segundos=3,
+                         miniatura={"fundo": "Artes/mini.png", "linha1": "Leitura em {total_dias} dias"})
+    enviados = []
+    original = youtube.enviar_video
+
+    def enviar(video, snippet, status):
+        enviados.append(duracao_audio(video))
+        return original(video, snippet, status)
+    youtube.enviar_video = enviar
+    miniaturas = []
+    youtube.definir_miniatura = lambda vid, img: miniaturas.append((vid, Image.open(img).size))
+    assert biblia.rodar(drive, youtube, raiz, cfg) == 0
+    assert enviados[0] >= 3 + 2 * 2 - 0.5          # leitura (2 capítulos de 2 s) + 3 s de tela final
+    assert miniaturas == [("V1", (1280, 720))]
+
+    # mudou o modelo da miniatura: o dia já publicado ganha a nova, sem reenviar o vídeo
+    cfg["biblia"]["miniatura"]["linha2"] = "Canal de teste"
+    estado = drive.ler_json(raiz, biblia.ARQ_ESTADO, {})
+    estado["dias"]["1"]["data"] = "2000-01-01"
+    drive.gravar_json(raiz, biblia.ARQ_ESTADO, estado)
+    biblia.rodar(drive, youtube, raiz, cfg, dry_run=False, quantos=0)
+    assert miniaturas[-1][0] == "V1" and len(youtube.videos) == 1
+
+
+def test_textos_da_miniatura():
+    import arte_biblia
+    assert arte_biblia.textos_do_dia([("Gênesis", 1), ("Gênesis", 2), ("Gênesis", 3)]) == ("Gênesis", "Capítulos 1 a 3")
+    assert arte_biblia.textos_do_dia([("Salmos", 23)]) == ("Salmos", "Salmo 23")
+    assert arte_biblia.textos_do_dia([("Rute", 4), ("1 Samuel", 1), ("1 Samuel", 2)]) == (
+        "Rute · 1 Samuel", "Rute 4 · 1 Samuel 1 e 2")

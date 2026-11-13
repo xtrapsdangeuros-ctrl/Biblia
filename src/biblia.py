@@ -63,6 +63,11 @@ PADRAO = {
                   "descricao": "O livro de {livro} completo em áudio, capítulo por capítulo."},
     },
     "imagem": "",          # imagem opcional (caminho no Drive a partir da raiz, ex.: "Artes/fundo.png")
+    # Artes do canal (caminhos no Drive a partir da raiz). Vazio = o robô desenha um fundo liso.
+    "fundo_video": "",     # imagem que aparece durante a leitura (1920x1080)
+    "tela_final": "",      # imagem dos últimos segundos (1920x1080), com os espaços da tela final do YouTube
+    "tela_final_segundos": 20,
+    "miniatura": {"fundo": "", "linha1": "", "linha2": ""},   # fundo sem texto (1280x720) + 2 linhas embaixo
     "categoria_id": "27",
 }
 
@@ -86,6 +91,7 @@ def config(cfg: dict) -> dict:
     """canal.yaml > biblia, por cima do padrão (as playlists são mescladas uma a uma)."""
     proprio = dict(cfg.get("biblia") or {})
     saida = {**PADRAO, **proprio}
+    saida["miniatura"] = {**PADRAO["miniatura"], **(proprio.get("miniatura") or {})}
     saida["playlists"] = {k: {**v, **((proprio.get("playlists") or {}).get(k) or {})}
                           for k, v in PADRAO["playlists"].items()}
     return saida
@@ -295,6 +301,71 @@ def _achar(drive, pasta_id: str, nome: str) -> dict | None:
                  if normalizar(" ".join(unicodedata.normalize("NFC", i["name"]).split())) == alvo), None)
 
 
+def _ajustar(imagem: Path, largura: int, altura: int, destino: Path) -> Path:
+    from PIL import Image, ImageOps
+    ImageOps.fit(Image.open(imagem).convert("RGB"), (largura, altura)).save(destino)
+    return destino
+
+
+def estilo_miniatura(conf: dict) -> str:
+    """Muda quando o modelo da miniatura muda: os dias já publicados ganham a miniatura nova."""
+    import hashlib
+    import json
+    return hashlib.sha1(json.dumps(conf.get("miniatura") or {}, sort_keys=True).encode()).hexdigest()[:10]
+
+
+def fazer_miniatura(drive, raiz: str, conf: dict, cores: dict, dia: int, total_dias: int, caps: list[Capitulo],
+                    valores: dict, imagem, tmp: Path) -> Path:
+    import arte_biblia
+    from video import gerar_arte
+    modelo = conf.get("miniatura") or {}
+    fundo = _baixar_imagem(drive, raiz, modelo.get("fundo") or "", tmp / "mini")
+    if fundo:
+        return arte_biblia.miniatura(fundo, tmp / f"miniatura_{dia}.jpg", dia, [(c.livro, c.numero) for c in caps],
+                                     _preencher(modelo.get("linha1", ""), valores),
+                                     _preencher(modelo.get("linha2", ""), valores))
+    return gerar_arte(imagem, tmp / f"miniatura_{dia}.jpg", valores["referencia"], "", f"Dia {dia}", "", 1280, 720,
+                      cores, miniatura=True)
+
+
+def com_tela_final(video: Path, tela: Path, segundos: float, destino: Path) -> Path:
+    """Acrescenta a tela final (imagem parada, em silêncio) no fim do vídeo."""
+    import subprocess
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error", "-i", str(video),
+        "-loop", "1", "-framerate", "1", "-t", f"{segundos:.0f}", "-i", str(tela),
+        "-f", "lavfi", "-t", f"{segundos:.0f}", "-i", "anullsrc=r=48000:cl=stereo",
+        "-filter_complex",
+        "[0:v]format=yuv420p,setsar=1,fps=1[v0];[1:v]format=yuv420p,setsar=1,fps=1[v1];"
+        "[0:a]aresample=48000,aformat=channel_layouts=stereo[a0];[v0][a0][v1][2:a]concat=n=2:v=1:a=1[v][a]",
+        "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-tune", "stillimage", "-preset", "veryfast",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(destino)],
+        check=True)
+    return destino
+
+
+def atualizar_miniaturas(drive, youtube, raiz: str, cfg: dict, conf: dict, plano, estado: dict) -> None:
+    """Dias já publicados com um modelo de miniatura antigo ganham a miniatura nova (sem reenviar o vídeo)."""
+    estilo = estilo_miniatura(conf)
+    pendentes = [d for d, r in (estado.get("dias") or {}).items() if r.get("miniatura") != estilo]
+    if not pendentes or not (conf.get("miniatura") or {}).get("fundo"):
+        return
+    cores = {**cfg["video"], **(conf.get("cores") or {})}
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        for d in sorted(pendentes, key=int)[:20]:
+            caps = plano[int(d) - 1]
+            valores = campos(conf, int(d), len(plano), caps, None, estado, cta=cfg.get("cta"))
+            try:
+                arquivo = fazer_miniatura(drive, raiz, conf, cores, int(d), len(plano), caps, valores, None, tmp)
+                youtube.definir_miniatura(estado["dias"][d]["video_id"], arquivo)
+                estado["dias"][d]["miniatura"] = estilo
+                log.info("Dia %s: miniatura trocada pelo modelo novo.", d)
+            except Exception as erro:
+                log.warning("Não consegui trocar a miniatura do dia %s: %s", d, erro)
+    drive.gravar_json(raiz, ARQ_ESTADO, estado)
+
+
 def _baixar_imagem(drive, raiz: str, caminho: str, destino_dir: Path) -> Path | None:
     if not caminho:
         return None
@@ -306,7 +377,10 @@ def _baixar_imagem(drive, raiz: str, caminho: str, destino_dir: Path) -> Path | 
             return None
         pasta = achado["id"]
     arquivo = _achar(drive, pasta, partes[-1])
-    return drive.baixar(arquivo["id"], destino_dir / Path(partes[-1]).name) if arquivo else None
+    if not arquivo:
+        log.warning("Arte não encontrada no Drive (%s); usando o padrão.", caminho)
+        return None
+    return drive.baixar(arquivo["id"], destino_dir / Path(partes[-1]).name)
 
 
 def publicar_dia(drive, youtube, raiz: str, cfg: dict, conf: dict, plano: list[list[Capitulo]], dia: int,
@@ -344,16 +418,23 @@ def publicar_dia(drive, youtube, raiz: str, cfg: dict, conf: dict, plano: list[l
         dados = snippet(conf, valores, caps, idioma)
         imagem = _baixar_imagem(drive, raiz, conf.get("imagem") or "", tmp)
         ref = valores["referencia"]
-        arte = gerar_arte(imagem, tmp / "arte.png", ref, "Bíblia em Áudio", f"Dia {dia} de {total_dias}", "",
-                          cores["largura"], cores["altura"], cores)
-        miniatura = gerar_arte(imagem, tmp / "miniatura.jpg", ref, "", f"Dia {dia}", "", 1280, 720, cores,
-                               miniatura=True)
+        arte = _baixar_imagem(drive, raiz, conf.get("fundo_video") or "", tmp / "fundo")
+        if arte:
+            arte = _ajustar(arte, cores["largura"], cores["altura"], tmp / "arte.png")
+        else:
+            arte = gerar_arte(imagem, tmp / "arte.png", ref, "Bíblia em Áudio", f"Dia {dia} de {total_dias}", "",
+                              cores["largura"], cores["altura"], cores)
+        miniatura = fazer_miniatura(drive, raiz, conf, cores, dia, total_dias, caps, valores, imagem, tmp)
         video = gerar_video(arte, audios, tmp / "video.mp4", cores.get("copiar_audio", True))
+        tela = _baixar_imagem(drive, raiz, conf.get("tela_final") or "", tmp / "tela")
+        if tela and float(conf.get("tela_final_segundos") or 0) > 0:
+            video = com_tela_final(video, _ajustar(tela, cores["largura"], cores["altura"], tmp / "tela.png"),
+                                   float(conf["tela_final_segundos"]), tmp / "video_final.mp4")
         status = {"privacyStatus": privacidade, "selfDeclaredMadeForKids": False,
                   "containsSyntheticMedia": bool(conf.get("voz_sintetica", False))}
         video_id = youtube.enviar_video(video, dados, status)
         log.info("Dia %d enviado: %s", dia, video_id)
-        estado.setdefault("dias", {})[str(dia)] = {
+        estado.setdefault("dias", {})[str(dia)] = {"miniatura": estilo_miniatura(conf),
             "video_id": video_id, "data": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "capitulos": [[c.livro, c.numero] for c in caps], "inicios": [round(t, 1) for t in inicios]}
         drive.gravar_json(raiz, ARQ_ESTADO, estado)   # grava logo: se algo abaixo falhar, o dia não é reenviado
@@ -422,6 +503,8 @@ def rodar(drive, youtube, raiz: str, cfg: dict, dry_run: bool = False, dia_pedid
     log.info("Bíblia: %d capítulos em %d dias; %d dia(s) já publicados.", len(caps), len(plano),
              len(estado.get("dias") or {}))
 
+    if not dry_run:
+        atualizar_miniaturas(drive, youtube, raiz, cfg, conf, plano, estado)
     if dia_pedido:
         pendentes = [dia_pedido]
     else:
