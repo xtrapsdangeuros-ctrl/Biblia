@@ -162,7 +162,8 @@ def composicao(rot: A.Roteiro, total: float, pasta: Path, audio: str) -> str:
             js.append(f'tl.fromTo("#corte{i} i", {{opacity: 0.85}}, {{opacity: 0, duration: 0.45, ease: "power2.out"}}, {ini});')
 
     # gancho: texto grande antes da primeira fala
-    primeira = rot.cenas[0].falas[0].inicio if rot.cenas and rot.cenas[0].falas else 2.0
+    fg = next((f for c in rot.cenas for f in c.falas if f.gancho), None)
+    primeira = (fg.inicio + fg.duracao + 0.25) if fg else (rot.cenas[0].falas[0].inicio if rot.cenas and rot.cenas[0].falas else 2.0)
     if rot.gancho:
         clips.append(f'<div id="gancho" class="clip" data-start="0" data-duration="{primeira:.2f}" data-track-index="5" '
                      f'style="z-index:30"><div class="gancho-txt">{esc(rot.gancho.upper())}</div></div>')
@@ -232,16 +233,19 @@ def composicao(rot: A.Roteiro, total: float, pasta: Path, audio: str) -> str:
                 js.append(f'tl.set("#{el} .boca-aberta", {{opacity: 0}}, {t1:.2f}); tl.set("#{el} .boca-fechada", {{opacity: 1}}, {t1:.2f});')
         if c.destaque:
             pid += 1
-            dur_d = min(3.4, c.fim - c.inicio)
-            clips.append(f'<div id="d{pid}" class="clip destaque" data-start="{c.inicio:.2f}" data-duration="{dur_d:.2f}" '
+            ini_d = max(c.inicio, primeira) if rot.gancho and ci == 0 else c.inicio   # depois do gancho
+            dur_d = min(3.4, c.fim - ini_d)
+            clips.append(f'<div id="d{pid}" class="clip destaque" data-start="{ini_d:.2f}" data-duration="{dur_d:.2f}" '
                          f'data-track-index="6" style="z-index:35"><div class="cartao">{esc(c.destaque)}</div></div>')
-            js.append(f'tl.from("#d{pid} .cartao", {{y: -300, rotation: -8, duration: 0.5, ease: "back.out(1.8)"}}, {c.inicio:.2f});')
-            js.append(f'tl.to("#d{pid} .cartao", {{y: -300, opacity: 0, duration: 0.3, ease: "power2.in"}}, {c.inicio + dur_d - 0.35:.2f});')
+            js.append(f'tl.from("#d{pid} .cartao", {{y: -300, rotation: -8, duration: 0.5, ease: "back.out(1.8)"}}, {ini_d:.2f});')
+            js.append(f'tl.to("#d{pid} .cartao", {{y: -300, opacity: 0, duration: 0.3, ease: "power2.in"}}, {ini_d + dur_d - 0.35:.2f});')
 
     # legenda karaokê e nome de quem fala
     gid = 0
     for c in rot.cenas:
         for f in c.falas:
+            if f.gancho:   # o gancho já está escrito grande na tela
+                continue
             blocos = _legenda_blocos(f.texto)
             pesos = [sum(len(x) + 1 for x in b) for b in blocos]
             t = f.inicio

@@ -74,6 +74,37 @@ def test_sem_hyperframes_usa_o_motor_antigo(tmp_path, monkeypatch):
     monkeypatch.delenv("HYPERFRAMES_CLI", raising=False)
     monkeypatch.setattr(H.shutil, "which", lambda _: None)
     usado = []
-    monkeypatch.setattr(A, "renderizar", lambda rot, destino, chave: usado.append("antigo") or destino)
+    monkeypatch.setattr(A, "renderizar", lambda rot, destino, chave, musica=None: usado.append("antigo") or destino)
     animar.fazer_video(A.ler_roteiro(ROTEIRO), tmp_path / "v.mp4")
     assert usado == ["antigo"]
+
+
+def test_comeca_falando(tmp_path):
+    rot, _, pagina = _montar(tmp_path)
+    primeira = rot.cenas[0].falas[0]
+    assert primeira.gancho and primeira.texto == ROTEIRO["gancho"] and primeira.inicio < 0.3
+    # o gancho aparece grande, sem legenda repetida
+    assert pagina.count(">20</span>") == 0
+
+
+def test_corta_gravacao_longa_em_trechos(tmp_path):
+    import subprocess
+    import musica as M
+    # 3 "músicas" separadas por silêncio: 30 s fraca, 200 s média (vira 2+ trechos), 60 s forte
+    gravacao = tmp_path / "banda.wav"
+    subprocess.run(["ffmpeg", "-y", "-v", "error",
+                    "-f", "lavfi", "-i", "sine=f=220:d=30", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono:d=3",
+                    "-f", "lavfi", "-i", "sine=f=330:d=200", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono:d=3",
+                    "-f", "lavfi", "-i", "sine=f=440:d=60",
+                    "-filter_complex", "[0]volume=0.1,aresample=44100[a];[1]aresample=44100[b];"
+                    "[2]volume=0.4,aresample=44100[c];[3]aresample=44100[d];[4]volume=1,aresample=44100[e];"
+                    "[a][b][c][d][e]concat=n=5:v=0:a=1", str(gravacao)], check=True)
+    trechos = M.cortar(gravacao, tmp_path / "t")
+    assert len(trechos) >= 4
+    assert all(M.MENOR_TRECHO <= t["duracao"] <= M.MAXIMO + 1 for t in trechos)
+    assert trechos[0]["clima"] == "calma" and trechos[-1]["clima"] == "epica"
+    assert all((tmp_path / "t" / t["arquivo"]).exists() for t in trechos)
+    # escolha: o menos usado do clima pedido
+    usos = {trechos[-1]["arquivo"]: 3}
+    assert M.escolher(trechos, "calma", 40, usos)["clima"] == "calma"
+    assert M.escolher(trechos, "inexistente", 40, {})["arquivo"]

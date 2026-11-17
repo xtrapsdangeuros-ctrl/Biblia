@@ -44,6 +44,7 @@ class Fala:
     inicio: float = 0.0
     duracao: float = 0.0
     audio: Path | None = None
+    gancho: bool = False      # a fala do gancho: o texto já aparece grande na tela, sem legenda
 
 
 @dataclass
@@ -90,6 +91,11 @@ def ler_roteiro(dados: dict) -> Roteiro:
         falas = [Fala(str(f[0]), str(f[1])) if isinstance(f, (list, tuple)) else Fala(f.get("quem", "narrador"),
                  f["texto"]) for f in c.get("falas") or []]
         cenas.append(Cena(c.get("cenario", "neutro"), list(c.get("personagens") or []), falas, c.get("destaque", "")))
+    # O vídeo sempre começa com alguém falando: o narrador lê o gancho (ou "gancho_fala", se vier) no quadro 0.
+    gancho = str(dados.get("gancho") or "")
+    if gancho and cenas and dados.get("gancho_falado", True):
+        quem = str(dados.get("gancho_quem") or "narrador")
+        cenas[0].falas.insert(0, Fala(quem, str(dados.get("gancho_fala") or gancho), gancho=True))
     return Roteiro(dados.get("formato", "short"), dados.get("titulo", ""), cenas, dados.get("gancho", ""),
                    dados.get("musica", "calma"), elenco, dados.get("narrador", VOZ_NARRADOR))
 
@@ -123,7 +129,7 @@ def _duracao(audio: Path) -> float:
 
 def preparar_vozes(rot: Roteiro, pasta: Path, chave: str | None) -> float:
     """Gera o áudio de cada fala e marca o tempo de cada fala e cena. Devolve a duração total."""
-    t = 2.2 if rot.gancho else 0.4   # o gancho fica sozinho na tela até a primeira fala
+    t = 0.15   # a voz entra logo no começo: vídeo mudo no primeiro segundo faz a pessoa passar direto
     n = 0
     for cena in rot.cenas:
         cena.inicio = t
@@ -352,10 +358,11 @@ def mixar_audio(rot: Roteiro, tmp: Path, total: float, musica: Path | None = Non
                     ";".join(filtros) + f";{mix}amix=inputs={len(falas)}:normalize=0,apad=whole_dur={total:.2f}"
                     f",atrim=0:{total:.2f}[v]", "-map", "[v]", "-ac", "1", str(voz)], check=True)
     trilha = musica or musica_gerada(rot.musica, total, tmp / "musica.wav")
+    volume = 0.16 if musica else 0.22   # gravação de verdade (com voz cantada) fica um pouco mais baixa
     audio = tmp / "audio.m4a"
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(voz), "-stream_loop", "-1", "-i", str(trilha),
                     "-filter_complex",
-                    f"[1:a]volume=0.22,atrim=0:{total:.2f},afade=t=out:st={max(total - 2.5, 0):.2f}:d=2.5[m];"
+                    f"[1:a]volume={volume},atrim=0:{total:.2f},afade=t=out:st={max(total - 2.5, 0):.2f}:d=2.5[m];"
                     "[m][0:a]sidechaincompress=threshold=0.03:ratio=6:attack=20:release=400[md];"
                     "[0:a][md]amix=inputs=2:normalize=0[o]",
                     "-map", "[o]", "-t", f"{total:.2f}", "-c:a", "aac", "-b:a", "160k", str(audio)], check=True)
@@ -395,6 +402,7 @@ def renderizar(rot: Roteiro, destino: Path, chave_tts: str | None = None, musica
             tela = fundos[cena.cenario].copy()
             d = ImageDraw.Draw(tela)
             fala = next((f for f in cena.falas if f.inicio <= t < f.inicio + f.duracao), None)
+            fim_gancho = next((f.inicio + f.duracao for f in cena.falas if f.gancho), 0.0)
             xs = _posicoes(len(cena.personagens), w, h, short)
             for i, (nome, x) in enumerate(zip(cena.personagens, xs)):
                 if nome not in sprites:
@@ -418,14 +426,14 @@ def renderizar(rot: Roteiro, destino: Path, chave_tts: str | None = None, musica
                     _texto_contorno(d, (px + img.width / 2, py - 35), rot.elenco[nome].rotulo, f_nome, (255, 255, 255),
                                     largura=4)
             # gancho no começo (texto grande)
-            if rot.gancho and t < 3.0:
+            if rot.gancho and t < max(fim_gancho, 1.5) + 0.2:
                 escala = min(1.0, t / 0.25)
                 f = arte_biblia.titulo_fonte(max(10, int(f_destaque.size * (0.6 + 0.4 * escala))))
                 for k, linha in enumerate(_quebrar(d, rot.gancho.upper(), f, w * 0.88)):
                     _texto_contorno(d, (w / 2, h * (0.18 if short else 0.2) + k * f.size * 1.1), linha, f,
                                     cor_destaque, largura=8)
             # cartão de destaque da cena
-            if cena.destaque and cena.inicio <= t < cena.inicio + 3.5 and not (rot.gancho and t < 3.0):
+            if cena.destaque and cena.inicio <= t < cena.inicio + 3.5 and not (rot.gancho and t < max(fim_gancho, 1.5) + 0.2):
                 pop = min(1.0, (t - cena.inicio) / 0.2)
                 f = arte_biblia.titulo_fonte(max(10, int(f_destaque.size * 0.8 * (0.7 + 0.3 * pop))))
                 linhas = _quebrar(d, cena.destaque, f, w * 0.8)
@@ -437,7 +445,7 @@ def renderizar(rot: Roteiro, destino: Path, chave_tts: str | None = None, musica
                     d.text((w / 2, y0 + 25 + f.size * 0.55 + k * f.size * 1.15), linha, font=f, fill=(60, 36, 21),
                            anchor="mm")
             # legenda (karaokê: a palavra falada fica em destaque)
-            if fala:
+            if fala and not fala.gancho:
                 trecho, ativa = legenda_atual(fala, t)
                 palavras = trecho.split()
                 y = h * 0.32 if short else h * 0.93   # Short: acima dos personagens (até o Golias)

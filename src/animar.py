@@ -24,7 +24,8 @@ import yaml
 import animacao as A
 import discreto
 import hyperframes as H
-from comum import carregar_config, configurar_log, log
+import musica as M
+from comum import carregar_config, configurar_log, eh_audio, log
 
 ARQ_ESTADO = "animacoes.json"
 PADRAO = {
@@ -41,6 +42,8 @@ PADRAO = {
     "playlist_shorts": "",
     "playlist_longos": "",
     "motor": "hyperframes",          # hyperframes | antigo
+    # Gravações longas (ex.: da banda) nesta pasta do Drive viram trechos de fundo; sem elas, música gerada.
+    "pasta_musicas": "Músicas de fundo",
 }
 
 
@@ -48,15 +51,57 @@ def config(cfg: dict) -> dict:
     return {**PADRAO, **(cfg.get("animacao") or {})}
 
 
-def fazer_video(rot: A.Roteiro, destino: Path, motor: str = "hyperframes") -> Path:
+def fazer_video(rot: A.Roteiro, destino: Path, motor: str = "hyperframes", musica: Path | None = None) -> Path:
     chave = A.chave_tts()
     if not chave:
         log.warning("Sem GOOGLE_TTS_API_KEY: o vídeo sai sem voz (só para teste).")
     if motor == "hyperframes" and H.disponivel():
-        return H.renderizar(rot, destino, chave)
+        return H.renderizar(rot, destino, chave, musica)
     if motor == "hyperframes":
         log.warning("HyperFrames não instalado: usando o motor antigo.")
-    return A.renderizar(rot, destino, chave)
+    return A.renderizar(rot, destino, chave, musica)
+
+
+def duracao_estimada(rot: A.Roteiro) -> float:
+    falas = sum(len(c.falas) for c in rot.cenas)
+    return A.caracteres(rot) / 14.5 + falas * A.PAUSA + 1.5
+
+
+def trechos_de_musica(drive, raiz: str, conf: dict, tmp: Path) -> tuple[str | None, list[dict]]:
+    """Corta (uma vez só) as gravações novas da pasta de músicas e devolve (pasta dos trechos, trechos)."""
+    pasta = drive.achar(raiz, conf["pasta_musicas"])
+    if not pasta or not drive.eh_pasta(pasta):
+        return None, []
+    pasta_trechos = drive.pasta(pasta["id"], "Trechos")
+    indice = drive.ler_json(pasta_trechos, "trechos.json", {"gravacoes": {}, "trechos": []})
+    for item in sorted(drive.listar(pasta["id"]), key=lambda i: i["name"]):
+        if drive.eh_pasta(item) or not eh_audio(item["name"]) or item["id"] in indice["gravacoes"]:
+            continue
+        discreto.registrar_item_drive(item, "música")
+        n = len(indice["gravacoes"]) + 1
+        log.info("Cortando a gravação %d em trechos de música de fundo...", n)
+        original = drive.baixar(item["id"], tmp / "gravacao" / f"g{n}{Path(item['name']).suffix}")
+        novos = M.cortar(original, tmp / "trechos", prefixo=f"g{n:02d}")
+        for t in novos:
+            t["id"] = drive.enviar(tmp / "trechos" / t["arquivo"], pasta_trechos, t["arquivo"], "audio/mpeg")
+            t["gravacao"] = n
+        indice["gravacoes"][item["id"]] = {"numero": n, "trechos": len(novos)}
+        indice["trechos"] += novos
+        drive.gravar_json(pasta_trechos, "trechos.json", indice)
+        original.unlink(missing_ok=True)
+        log.info("Gravação %d: %d trechos (%s).", n, len(novos),
+                 ", ".join(f"{c} {sum(1 for t in novos if t['clima'] == c)}" for c in ("calma", "alegre", "epica")))
+    return pasta_trechos, indice["trechos"]
+
+
+def musica_para(drive, rot: A.Roteiro, trechos: list[dict], estado: dict, tmp: Path) -> Path | None:
+    escolhido = M.escolher(trechos, rot.musica, duracao_estimada(rot), estado.setdefault("musicas", {}))
+    if not escolhido:
+        return None
+    estado["musicas"][escolhido["arquivo"]] = estado["musicas"].get(escolhido["arquivo"], 0) + 1
+    log.info("Música de fundo: trecho %s (%s, %d s).", escolhido["arquivo"], escolhido["clima"],
+             escolhido["duracao"])
+    return drive.baixar(escolhido["id"], tmp / "musica" / escolhido["arquivo"])
 
 
 def snippet(dados: dict, rot: A.Roteiro, conf: dict, idioma: str = "pt-BR") -> dict:
@@ -125,14 +170,18 @@ def rodar(drive, youtube, raiz: str, cfg: dict, pedido: str = "", so_drive: bool
             log.warning("Faltam roteiros de Shorts para a próxima semana: hora de mandar mais para a pasta.")
     idioma = (cfg.get("publicacao") or {}).get("idioma", "pt-BR")
     with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        _, trechos = trechos_de_musica(drive, raiz, conf, tmp) if escolhidos else (None, [])
         for n, (item, dados) in enumerate(escolhidos, start=1):
             rot = A.ler_roteiro(dados)
             log.info("Fazendo o vídeo animado %d (%s, %d caracteres de voz)...", n, rot.formato, A.caracteres(rot))
-            video = fazer_video(rot, Path(tmp) / f"v{n}.mp4", conf["motor"])
+            trilha = musica_para(drive, rot, trechos, estado, tmp)
+            video = fazer_video(rot, tmp / f"v{n}.mp4", conf["motor"], trilha)
             if so_drive:
                 pronto = drive.pasta(raiz, conf["pasta_prontos"])
                 drive.enviar(video, pronto, item["name"].rsplit(".", 1)[0] + ".mp4", "video/mp4")
                 log.info("Vídeo salvo no Drive (pasta de animações prontas).")
+                drive.gravar_json(raiz, ARQ_ESTADO, estado)
                 continue
             try:
                 vid = youtube.enviar_video(video, snippet(dados, rot, conf, idioma),
@@ -164,11 +213,12 @@ def main() -> int:
     parser.add_argument("--so-drive", action="store_true", help="salva o MP4 no Drive em vez de publicar")
     parser.add_argument("--local", type=Path, help="roteiro YAML no computador (teste)")
     parser.add_argument("--saida", type=Path, default=Path("animacao.mp4"))
+    parser.add_argument("--musica", type=Path, help="teste local: trecho de música de fundo")
     args = parser.parse_args()
 
     if args.local:
         rot = A.ler_roteiro(yaml.safe_load(args.local.read_text(encoding="utf-8")))
-        print(fazer_video(rot, args.saida))
+        print(fazer_video(rot, args.saida, musica=args.musica))
         return 0
     cfg = carregar_config()
     conf = config(cfg)

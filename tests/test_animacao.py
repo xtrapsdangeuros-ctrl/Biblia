@@ -24,7 +24,9 @@ def test_roteiro_vira_video(tmp_path):
         "elenco": {"davi": {"tipo": "pessoa", "rotulo": "Davi", "funda": True, "tamanho": 0.8}},
         "cenas": [{"cenario": "campo", "personagens": ["tomatinho", "davi"], "destaque": "Art. 1º",
                    "falas": [["narrador", "Era uma vez."], ["davi", "Oi!"]]}]})
-    assert A.caracteres(rot) == len("Era uma vez.") + len("Oi!")
+    # o gancho também é falado (o vídeo começa com voz)
+    assert A.caracteres(rot) == len("Pergunta?") + len("Era uma vez.") + len("Oi!")
+    assert rot.cenas[0].falas[0].gancho
     video = A.renderizar(rot, tmp_path / "v.mp4")
     saida = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height,codec_type",
                             "-of", "csv=p=0", str(video)], capture_output=True, text=True).stdout
