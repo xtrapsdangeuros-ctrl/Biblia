@@ -123,7 +123,7 @@ def _duracao(audio: Path) -> float:
 
 def preparar_vozes(rot: Roteiro, pasta: Path, chave: str | None) -> float:
     """Gera o áudio de cada fala e marca o tempo de cada fala e cena. Devolve a duração total."""
-    t = 1.2 if rot.gancho else 0.4
+    t = 2.2 if rot.gancho else 0.4   # o gancho fica sozinho na tela até a primeira fala
     n = 0
     for cena in rot.cenas:
         cena.inicio = t
@@ -339,6 +339,30 @@ def _posicoes(n: int, w: int, h: int, short: bool) -> list[float]:
     return [w * (0.5 if n == 1 else 0.25 + 0.5 * i / (n - 1)) for i in range(n)]
 
 
+def mixar_audio(rot: Roteiro, tmp: Path, total: float, musica: Path | None = None) -> Path:
+    """Falas no tempo certo + música baixinha, que abaixa sozinha quando alguém fala. Devolve um .m4a."""
+    voz = tmp / "voz.wav"
+    filtros, entradas = [], []
+    falas = [f for c in rot.cenas for f in c.falas]
+    for i, f in enumerate(falas):
+        entradas += ["-i", str(f.audio)]
+        filtros.append(f"[{i}:a]adelay={int(f.inicio * 1000)}|{int(f.inicio * 1000)},aresample=44100[a{i}]")
+    mix = "".join(f"[a{i}]" for i in range(len(falas)))
+    subprocess.run(["ffmpeg", "-y", "-v", "error", *entradas, "-filter_complex",
+                    ";".join(filtros) + f";{mix}amix=inputs={len(falas)}:normalize=0,apad=whole_dur={total:.2f}"
+                    f",atrim=0:{total:.2f}[v]", "-map", "[v]", "-ac", "1", str(voz)], check=True)
+    trilha = musica or musica_gerada(rot.musica, total, tmp / "musica.wav")
+    audio = tmp / "audio.m4a"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(voz), "-stream_loop", "-1", "-i", str(trilha),
+                    "-filter_complex",
+                    f"[1:a]volume=0.22,atrim=0:{total:.2f},afade=t=out:st={max(total - 2.5, 0):.2f}:d=2.5[m];"
+                    "[m][0:a]sidechaincompress=threshold=0.03:ratio=6:attack=20:release=400[md];"
+                    "[0:a][md]amix=inputs=2:normalize=0[o]",
+                    "-map", "[o]", "-t", f"{total:.2f}", "-c:a", "aac", "-b:a", "160k", str(audio)], check=True)
+
+    return audio
+
+
 def renderizar(rot: Roteiro, destino: Path, chave_tts: str | None = None, musica: Path | None = None,
                cor_destaque=(242, 184, 75)) -> Path:
     w, h = rot.tamanho
@@ -356,25 +380,7 @@ def renderizar(rot: Roteiro, destino: Path, chave_tts: str | None = None, musica
         f_nome = arte_biblia.lora(int(w * (0.035 if short else 0.022)))
         chao = int(h * 0.84) if short else int(h * 0.88)
 
-        # áudio: falas no tempo certo + música baixinha
-        voz = tmp / "voz.wav"
-        filtros, entradas = [], []
-        falas = [f for c in rot.cenas for f in c.falas]
-        for i, f in enumerate(falas):
-            entradas += ["-i", str(f.audio)]
-            filtros.append(f"[{i}:a]adelay={int(f.inicio * 1000)}|{int(f.inicio * 1000)},aresample=44100[a{i}]")
-        mix = "".join(f"[a{i}]" for i in range(len(falas)))
-        subprocess.run(["ffmpeg", "-y", "-v", "error", *entradas, "-filter_complex",
-                        ";".join(filtros) + f";{mix}amix=inputs={len(falas)}:normalize=0,apad=whole_dur={total:.2f}"
-                        f",atrim=0:{total:.2f}[v]", "-map", "[v]", "-ac", "1", str(voz)], check=True)
-        trilha = musica or musica_gerada(rot.musica, total, tmp / "musica.wav")
-        audio = tmp / "audio.m4a"
-        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(voz), "-stream_loop", "-1", "-i", str(trilha),
-                        "-filter_complex",
-                        f"[1:a]volume=0.22,atrim=0:{total:.2f},afade=t=out:st={max(total - 2.5, 0):.2f}:d=2.5[m];"
-                        "[m][0:a]sidechaincompress=threshold=0.03:ratio=6:attack=20:release=400[md];"
-                        "[0:a][md]amix=inputs=2:normalize=0[o]",
-                        "-map", "[o]", "-t", f"{total:.2f}", "-c:a", "aac", "-b:a", "160k", str(audio)], check=True)
+        audio = mixar_audio(rot, tmp, total, musica)
 
         enc = subprocess.Popen(["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}",
                                 "-r", str(FPS), "-i", "-", "-i", str(audio), "-map", "0:v", "-map", "1:a",

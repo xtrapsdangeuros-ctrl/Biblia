@@ -1,0 +1,94 @@
+name: Vídeos animados
+
+on:
+  schedule:
+    - cron: "37 13 * * *"   # 10:37 em Brasília
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (Settings > Environments), ex.: canal-3; vazio = todos os da variável CANAIS"
+        type: string
+        default: ""
+      roteiro:
+        description: "Trecho do nome de um roteiro (vazio = os do dia, pela fila)"
+        type: string
+        default: ""
+      so_drive:
+        description: "Só testar: salva o vídeo no Drive (pasta Animações prontas) em vez de publicar"
+        type: boolean
+        default: false
+
+# Só leitura do código: os workflows não alteram o repositório.
+permissions:
+  contents: read
+
+jobs:
+  animar:
+    name: ${{ matrix.canal }}
+    if: vars.CANAIS != '' || inputs.canal != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        canal: ${{ fromJSON(inputs.canal && format('["{0}"]', inputs.canal) || vars.CANAIS || '["canal-1"]') }}
+    environment: ${{ matrix.canal }}
+    concurrency:
+      group: animar-${{ matrix.canal }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      GOOGLE_REFRESH_TOKEN_DRIVE: ${{ secrets.GOOGLE_REFRESH_TOKEN_DRIVE }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
+      GOOGLE_TTS_API_KEY: ${{ secrets.GOOGLE_TTS_API_KEY }}
+      # Sem estatísticas de uso do HyperFrames
+      DO_NOT_TRACK: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -q -r requirements.txt
+
+      # Canal sem animações (canal.yaml > animacao > ativo: false) para aqui, sem instalar mais nada.
+      - name: Ver se o canal tem animações
+        id: checar
+        env:
+          ROTEIRO: ${{ inputs.roteiro }}
+        run: |
+          args=()
+          [ -n "$ROTEIRO" ] && args+=(--roteiro "@entrada:roteiro")
+          python src/animar.py --checar "${args[@]}"
+
+      - name: Instalar ffmpeg e fontes
+        if: steps.checar.outputs.ativo == 'true'
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg fonts-dejavu-core
+
+      - uses: actions/setup-node@v4
+        if: steps.checar.outputs.ativo == 'true'
+        with:
+          node-version: "22"
+
+      # Versão fixa: uma atualização do HyperFrames não muda os vídeos sem a gente testar antes.
+      - name: Instalar o HyperFrames
+        if: steps.checar.outputs.ativo == 'true'
+        run: npm install -g --no-fund --no-audit hyperframes@0.9.64
+
+      - name: Fazer e publicar os vídeos animados
+        if: steps.checar.outputs.ativo == 'true'
+        env:
+          ROTEIRO: ${{ inputs.roteiro }}
+          # o Chrome que já vem na máquina do GitHub
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+          CHROME_PATH: /usr/bin/google-chrome
+        run: |
+          args=()
+          [ -n "$ROTEIRO" ] && args+=(--roteiro "@entrada:roteiro")
+          [ "${{ inputs.so_drive }}" = "true" ] && args+=(--so-drive)
+          python src/animar.py "${args[@]}"

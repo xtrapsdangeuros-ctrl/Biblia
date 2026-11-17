@@ -41,3 +41,14 @@ metadados:
   autor_da_serie: {}
   # Seções que não são capítulo e devem aparecer só com o nome (ex.: um apêndice com nome próprio).
   secoes_especiais: []
+
+# Vídeos animados (src/animar.py, workflow "Vídeos animados"): roteiros YAML na pasta "Roteiros animados" do Drive.
+# animacao:
+#   ativo: true
+#   shorts_por_dia: 1
+#   dias_longos: [1, 4]        # 0 = segunda ... 6 = domingo (terça e sexta)
+#   privacidade: public
+#   hashtags: "#exemplo"
+#   tags: [exemplo]
+#   playlist_shorts: ""        # ID da playlist (opcional)
+#   playlist_longos: ""
