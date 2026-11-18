@@ -161,10 +161,11 @@ def _duracao(audio: Path) -> float:
 
 
 EFEITOS = {
-    # Voz "de Deus": um pouco mais grave (sem ficar lenta), graves encorpados, agudos macios e eco de catedral.
+    # Voz "de Deus": um pouco mais grave (sem ficar lenta), graves encorpados, agudos macios e só um toque de ambiente
+    # (voz cheia e próxima, sem eco de catedral).
     "divino": ("asetrate=44100*0.95,aresample=44100,atempo=1.0526,"
                "highpass=f=55,bass=g=5:f=120:w=0.8,equalizer=f=3200:t=q:w=1.2:g=-3,"
-               "aecho=0.85:0.75:45|95|160|240:0.28|0.2|0.13|0.08,"
+               "aecho=0.9:0.85:22|48:0.1|0.05,"
                "acompressor=threshold=0.2:ratio=3:attack=10:release=250,alimiter=limit=0.95"),
 }
 
@@ -413,7 +414,7 @@ def mixar_audio(rot: Roteiro, tmp: Path, total: float, musica: Path | None = Non
                     ";".join(filtros) + f";{mix}amix=inputs={len(falas)}:normalize=0,apad=whole_dur={total:.2f}"
                     f",atrim=0:{total:.2f}[v]", "-map", "[v]", "-ac", "1", str(voz)], check=True)
     trilha = musica or musica_gerada(rot.musica, total, tmp / "musica.wav")
-    volume = 0.16 if musica else 0.22   # gravação de verdade (com voz cantada) fica um pouco mais baixa
+    volume = 0.3 if musica else 0.22   # a gravação da banda bem presente (abaixa sozinha quando alguém fala)
     audio = tmp / "audio.m4a"
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(voz), "-stream_loop", "-1", "-i", str(trilha),
                     "-filter_complex",
