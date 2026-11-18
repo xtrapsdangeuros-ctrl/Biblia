@@ -229,7 +229,7 @@ def audiolivros_extras(drive, youtube, raiz: str, cfg: dict, args) -> int:
         return 0
     dias = conf.get("dias_da_semana", [0, 3])          # 0 = segunda ... 6 = domingo
     hoje = (datetime.now(timezone.utc) - timedelta(hours=3)).weekday()
-    if hoje not in dias and not args.quantos:
+    if hoje not in dias and not args.quantos and not args.livro:   # pedido de um livro: roda em qualquer dia
         log.info("Audiolivros: hoje não é dia (dias da semana %s).", dias)
         return 0
     pasta = drive.achar(raiz, conf.get("pasta") or "Livros Teológicos")
