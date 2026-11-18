@@ -22,6 +22,10 @@ on:
         type: choice
         options: ["", "google", "elevenlabs"]
         default: ""
+      provar:
+        description: "Provador: frase para ouvir em várias vozes do ElevenLabs (vazio = não usar)"
+        type: string
+        default: ""
 
 # Só leitura do código: os workflows não alteram o repositório.
 permissions:
@@ -68,7 +72,9 @@ jobs:
         id: checar
         env:
           ROTEIRO: ${{ inputs.roteiro }}
+          PROVAR: ${{ inputs.provar }}
         run: |
+          if [ -n "$PROVAR" ]; then echo "ativo=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           args=()
           [ -n "$ROTEIRO" ] && args+=(--roteiro "@entrada:roteiro")
           python src/animar.py --checar "${args[@]}"
@@ -91,6 +97,7 @@ jobs:
         if: steps.checar.outputs.ativo == 'true'
         env:
           ROTEIRO: ${{ inputs.roteiro }}
+          PROVAR: ${{ inputs.provar }}
           # o Chrome que já vem na máquina do GitHub
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
           CHROME_PATH: /usr/bin/google-chrome
@@ -98,4 +105,5 @@ jobs:
           args=()
           [ -n "$ROTEIRO" ] && args+=(--roteiro "@entrada:roteiro")
           [ "${{ inputs.so_drive }}" = "true" ] && args+=(--so-drive)
+          if [ -n "$PROVAR" ]; then python src/animar.py --provar "@entrada:provar"; exit $?; fi
           python src/animar.py "${args[@]}"

@@ -80,7 +80,9 @@ EMOCOES = {"triste": "sad", "sussurrando": "whispers", "sussurro": "whispers", "
            "choro": "crying", "rindo": "laughs", "risada": "laughs", "gritando": "shouts", "grito": "shouts",
            "bravo": "angry", "com raiva": "angry", "medo": "scared", "com medo": "scared", "pausa": "pause",
            "emocionado": "emotional", "calmo": "calm", "sério": "serious", "surpreso": "surprised",
-           "esperançoso": "hopeful", "firme": "determined", "voz embargada": "voice breaking"}
+           "esperançoso": "hopeful", "firme": "determined", "determinado": "determined",
+           "decidido": "determined", "com fé": "confident", "confiante": "confident", "carinhoso": "warmly",
+           "acolhedor": "warmly", "voz embargada": "voice breaking"}
 
 
 def _emocao(texto: str) -> tuple[str, str]:

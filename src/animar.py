@@ -78,6 +78,23 @@ def usar_vozes(rot: A.Roteiro, conf: dict) -> None:
     log.info("Vozes do ElevenLabs: %s.", discreto.Seguro(", ".join(sorted(set(escolhidas.values())))))
 
 
+def provar_vozes(texto: str, genero: str) -> int:
+    import elevenlabs
+    from google_api import Drive, credenciais_do_ambiente
+    if not elevenlabs.chave():
+        log.error("Falta o segredo ELEVENLABS_API_KEY.")
+        return 1
+    raiz = os.environ.get("DRIVE_PASTA_RAIZ") or sys.exit("Falta a variável DRIVE_PASTA_RAIZ")
+    drive = Drive(credenciais_do_ambiente())
+    pasta = drive.pasta(raiz, "Provador de vozes")
+    _, marcado = A._emocao(texto)
+    with tempfile.TemporaryDirectory() as tmp:
+        for arq in elevenlabs.provar(elevenlabs.chave(), marcado, Path(tmp), genero=genero):
+            drive.enviar(arq, pasta, arq.name, "audio/mpeg")
+            log.info("Provador: voz %s salva.", discreto.Seguro(arq.stem))
+    return 0
+
+
 def duracao_estimada(rot: A.Roteiro) -> float:
     falas = sum(len(c.falas) for c in rot.cenas)
     return A.caracteres(rot) / 14.5 + falas * A.PAUSA + 1.5
@@ -233,12 +250,17 @@ def main() -> int:
     parser.add_argument("--local", type=Path, help="roteiro YAML no computador (teste)")
     parser.add_argument("--saida", type=Path, default=Path("animacao.mp4"))
     parser.add_argument("--musica", type=Path, help="teste local: trecho de música de fundo")
+    parser.add_argument("--provar", type=discreto.resolver, default="",
+                        help="lê este texto com várias vozes do ElevenLabs e salva no Drive (Provador de vozes)")
+    parser.add_argument("--genero", default="male", help="vozes do provador: male | female")
     args = parser.parse_args()
 
     if args.local:
         rot = A.ler_roteiro(yaml.safe_load(args.local.read_text(encoding="utf-8")))
         print(fazer_video(rot, args.saida, musica=args.musica))
         return 0
+    if args.provar:
+        return provar_vozes(args.provar, args.genero)
     cfg = carregar_config()
     conf = config(cfg)
     ligado = bool(conf.get("ativo")) or bool(args.roteiro)

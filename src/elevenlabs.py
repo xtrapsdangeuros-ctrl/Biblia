@@ -21,6 +21,7 @@ log = logging.getLogger("audiolivro")
 URL = "https://api.elevenlabs.io/v1/"
 MODELO = "eleven_v3"            # o mais expressivo (entende [sad], [whispers]...)
 RESERVA = "eleven_multilingual_v2"
+ESTAB_NARRADOR, ESTAB_PERSONAGEM = 0.5, 0.0
 PREFIXO = "eleven:"
 FEMININAS = {"Kore", "Aoede", "Leda", "Zephyr", "Callirrhoe", "Despina", "Erinome", "Laomedeia", "Pulcherrima",
              "Vindemiatrix", "Achernar", "Autonoe", "Gacrux", "Sulafat"}
@@ -28,7 +29,7 @@ FEMININAS = {"Kore", "Aoede", "Leda", "Zephyr", "Callirrhoe", "Despina", "Erinom
 PREFERIDAS = {
     "narrador": ["Brian", "George", "Daniel", "Adam", "Bill", "Eric"],
     "masculina": ["Liam", "Will", "Chris", "Charlie", "Callum", "Roger", "Eric", "Josh"],
-    "jovem": ["Liam", "Will", "Charlie", "Chris", "Josh"],
+    "jovem": ["Chris", "Charlie", "Liam", "Will", "Josh"],
     "feminina": ["Sarah", "Charlotte", "Matilda", "Alice", "Lily", "Jessica", "Laura", "Aria"],
 }
 
@@ -123,11 +124,12 @@ def aplicar(rot, chave_api: str, fixas: dict | None = None) -> dict[str, str]:
     vozes = vozes_da_conta(chave_api)
     elenco = escolher_elenco(rot, vozes, fixas)
     nomes = {v["voice_id"]: v["name"] for v in vozes}
+    # estabilidade do v3: o narrador fica "natural" (0.5); os personagens, "criativos" (0), com mais garra e emoção
     for quem, vid in elenco.items():
         if quem == "narrador":
-            rot.narrador = PREFIXO + vid
+            rot.narrador = f"{PREFIXO}{vid}@{ESTAB_NARRADOR}"
         elif quem in rot.elenco:
-            rot.elenco[quem].voz = PREFIXO + vid
+            rot.elenco[quem].voz = f"{PREFIXO}{vid}@{ESTAB_PERSONAGEM}"
     if "narrador" not in elenco:
         rot.narrador = PREFIXO + pegar_qualquer(vozes)
     return {quem: nomes.get(vid, vid) for quem, vid in elenco.items()}
@@ -138,9 +140,11 @@ def pegar_qualquer(vozes: list[dict]) -> str:
 
 
 def sintetizar(texto: str, voice_id: str, destino: Path, chave_api: str, modelo: str = MODELO) -> Path:
+    """voice_id pode vir com a estabilidade: "abc123@0.0"."""
+    voice_id, _, estab = voice_id.partition("@")
     if modelo == "eleven_v3":
         # v3: estabilidade 0 = "criativo" (mais emoção), 0.5 = natural, 1 = robusto
-        ajustes = {"stability": float(os.environ.get("ELEVENLABS_ESTABILIDADE") or 0.5)}
+        ajustes = {"stability": float(estab or os.environ.get("ELEVENLABS_ESTABILIDADE") or 0.5)}
     else:
         ajustes = {"stability": 0.35, "similarity_boost": 0.8, "style": 0.45, "use_speaker_boost": True}
     try:
@@ -151,6 +155,19 @@ def sintetizar(texto: str, voice_id: str, destino: Path, chave_api: str, modelo:
             raise
         log.warning("ElevenLabs: modelo %s recusou (%s); usando o %s.", modelo, erro, RESERVA)
         limpo = " ".join(__import__("re").sub(r"\[[^\]]*\]", " ", texto).split())
-        return sintetizar(limpo, voice_id, destino, chave_api, RESERVA)
+        return sintetizar(limpo, f"{voice_id}@{estab}" if estab else voice_id, destino, chave_api, RESERVA)
     destino.write_bytes(audio)
     return destino
+
+
+def provar(chave_api: str, texto: str, pasta: Path, quantas: int = 6, genero: str = "male",
+           pular: tuple = ("Brian",)) -> list[Path]:
+    """Lê o mesmo texto com várias vozes da conta (uma por arquivo, com o nome da voz) para escolher de ouvido."""
+    pasta.mkdir(parents=True, exist_ok=True)
+    vozes = [v for v in vozes_da_conta(chave_api) if (v.get("labels") or {}).get("gender") == genero
+             and v["name"].split(" ")[0] not in pular][:quantas]
+    saida = []
+    for v in vozes:
+        nome = v["name"].split(" ")[0]
+        saida.append(sintetizar(texto, f"{v['voice_id']}@{ESTAB_PERSONAGEM}", pasta / f"{nome}.mp3", chave_api))
+    return saida
