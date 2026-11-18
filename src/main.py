@@ -11,13 +11,13 @@ import argparse
 import os
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
 
 import discreto
-from comum import carregar_config, configurar_log, ler_nome_capitulo, log, normalizar, pausado
+from comum import carregar_config, configurar_log, ler_nome_capitulo, log, mesclar, normalizar, pausado
 from metadados import descricao_playlist, intervalo, livro_e_autor, rotulo_e_titulo, snippet_video, titulo_playlist
 from video import duracao_audio, gerar_arte, gerar_video
 
@@ -216,9 +216,38 @@ def rodar_drive(args, cfg: dict) -> int:
     raiz = os.environ.get("DRIVE_PASTA_RAIZ") or sys.exit("Falta a variável DRIVE_PASTA_RAIZ")
     import biblia
     if biblia.ligado(cfg):   # canal da Bíblia: um dia do plano por vídeo (o campo "capítulo" vira o dia)
-        return biblia.rodar(drive, youtube, raiz, cfg, args.dry_run, args.capitulo, args.quantos)
+        resultado = biblia.rodar(drive, youtube, raiz, cfg, args.dry_run, args.capitulo, args.quantos)
+        return max(resultado, audiolivros_extras(drive, youtube, raiz, cfg, args))
+    return publicar_livros(drive, youtube, raiz, cfg, args)
 
+
+def audiolivros_extras(drive, youtube, raiz: str, cfg: dict, args) -> int:
+    """Canal da Bíblia: audiolivros de uma subpasta (canal.yaml > audiolivros), em alguns dias da semana.
+    Sem ficha.yaml o livro é sempre privado (licença uso_pessoal)."""
+    conf = cfg.get("audiolivros") or {}
+    if not conf.get("ativo") or args.capitulo is not None:
+        return 0
+    dias = conf.get("dias_da_semana", [0, 3])          # 0 = segunda ... 6 = domingo
+    hoje = (datetime.now(timezone.utc) - timedelta(hours=3)).weekday()
+    if hoje not in dias and not args.quantos:
+        log.info("Audiolivros: hoje não é dia (dias da semana %s).", dias)
+        return 0
+    pasta = drive.achar(raiz, conf.get("pasta") or "Livros Teológicos")
+    if not pasta or not drive.eh_pasta(pasta):
+        log.warning("Audiolivros: pasta não encontrada (canal.yaml > audiolivros > pasta).")
+        return 0
+    cfg_livros = mesclar({k: v for k, v in cfg.items() if k != "modo"}, {"publicacao": {
+        "videos_por_dia": int(conf.get("videos_por_dia") or 1),
+        "minutos_por_video": float(conf.get("minutos_por_video") or 60),
+        "modo": conf.get("ordem") or "sequencial",
+        "livros": list(conf.get("livros") or [])}})
+    log.info("Audiolivros: publicando o vídeo do dia.")
+    return publicar_livros(drive, youtube, pasta["id"], cfg_livros, args)
+
+
+def publicar_livros(drive, youtube, raiz: str, cfg: dict, args) -> int:
     from google_api import LimiteDiario
+    from livro import ARQ_PUBLICADOS, carregar_livro, pastas_de_livros, pedido_casa
 
     if args.capitulo is not None:
         restantes = 1

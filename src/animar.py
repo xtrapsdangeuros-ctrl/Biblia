@@ -45,6 +45,7 @@ PADRAO = {
     # Gravações longas (ex.: da banda) nesta pasta do Drive viram trechos de fundo; sem elas, música gerada.
     "pasta_musicas": "Músicas de fundo",
     "voz": "google",                 # google | elevenlabs (segredo ELEVENLABS_API_KEY)
+    "voz_longos": "",                # vazio = a mesma dos Shorts; "google" poupa os créditos do ElevenLabs
     "elevenlabs": {},                # vozes: {narrador: "Nome ou ID", personagem: ...}
     "efeito_narrador": "",           # "divino": voz grave, aveludada, com eco de catedral (o roteiro pode trocar)
 }
@@ -67,7 +68,8 @@ def fazer_video(rot: A.Roteiro, destino: Path, motor: str = "hyperframes", music
 
 def usar_vozes(rot: A.Roteiro, conf: dict) -> None:
     """Com animacao.voz = elevenlabs (ou VOZ_ANIMACAO no teste), troca as vozes do Google pelas do ElevenLabs."""
-    motor = (os.environ.get("VOZ_ANIMACAO") or conf.get("voz") or "google").strip().lower()
+    padrao = conf.get("voz_longos") if rot.formato == "longo" and conf.get("voz_longos") else conf.get("voz")
+    motor = (os.environ.get("VOZ_ANIMACAO") or padrao or "google").strip().lower()
     if motor != "elevenlabs":
         return
     import elevenlabs

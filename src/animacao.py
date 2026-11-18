@@ -135,7 +135,7 @@ def _voz_de(rot: Roteiro, quem: str) -> str:
     return rot.narrador if quem == "narrador" or quem not in rot.elenco else rot.elenco[quem].voz
 
 
-def sintetizar(texto: str, voz: str, destino: Path, chave: str | None) -> Path:
+def sintetizar(texto: str, voz: str, destino: Path, chave: str | None, velocidade: float = 1.0) -> Path:
     """MP3 da fala. Sem chave do Google (testes), gera silêncio do tamanho aproximado da fala.
     Voz "eleven:<id>" usa o ElevenLabs (chave no segredo ELEVENLABS_API_KEY)."""
     if voz.startswith("eleven:"):
@@ -147,7 +147,7 @@ def sintetizar(texto: str, voz: str, destino: Path, chave: str | None) -> Path:
         from vozes import google
         resp = google("text:synthesize", chave, {
             "input": {"text": texto}, "voice": {"languageCode": "pt-BR", "name": voz},
-            "audioConfig": {"audioEncoding": "MP3", "sampleRateHertz": 24000}})
+            "audioConfig": {"audioEncoding": "MP3", "sampleRateHertz": 24000, "speakingRate": velocidade}})
         destino.write_bytes(base64.b64decode(resp["audioContent"]))
     else:
         segundos = max(0.8, len(texto) * 0.065)
@@ -181,8 +181,31 @@ def efeito_de_voz(audio: Path, efeito: str, destino: Path) -> Path:
     return destino
 
 
+def _com_pausas(partes: list[str], voz: str, destino: Path, chave: str | None, velocidade: float,
+                silencio: float = 1.4) -> Path:
+    """Voz do Google não entende [pausa]: fala cada pedaço e junta com silêncio de verdade no meio."""
+    arquivos = []
+    for i, parte in enumerate(partes):
+        arq = destino.with_name(f"{destino.stem}_p{i}.mp3")
+        arquivos += [sintetizar(parte, voz, arq, chave, velocidade)]
+    entradas, filtro = [], []
+    for i, arq in enumerate(arquivos):
+        entradas += ["-i", str(arq)]
+        filtro.append(f"[{i}:a]aresample=24000,aformat=channel_layouts=mono"
+                      + (f",apad=pad_dur={silencio}" if i < len(arquivos) - 1 else "") + f"[a{i}]")
+    junta = "".join(f"[a{i}]" for i in range(len(arquivos)))
+    saida = destino.with_suffix(".wav")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", *entradas, "-filter_complex",
+                    ";".join(filtro) + f";{junta}concat=n={len(arquivos)}:v=0:a=1[o]", "-map", "[o]", str(saida)],
+                   check=True)
+    return saida
+
+
 def preparar_vozes(rot: Roteiro, pasta: Path, chave: str | None) -> float:
-    """Gera o áudio de cada fala e marca o tempo de cada fala e cena. Devolve a duração total."""
+    """Gera o áudio de cada fala e marca o tempo de cada fala e cena. Devolve a duração total.
+    Vídeo longo (meditação): fala um pouco mais lenta, respiro maior entre as falas e entre as cenas."""
+    longo = rot.formato == "longo"
+    pausa, entre_cenas, velocidade = (1.1, 1.8, 0.92) if longo else (PAUSA, 0.2, 1.0)
     t = 0.15   # a voz entra logo no começo: vídeo mudo no primeiro segundo faz a pessoa passar direto
     n = 0
     for cena in rot.cenas:
@@ -190,16 +213,24 @@ def preparar_vozes(rot: Roteiro, pasta: Path, chave: str | None) -> float:
         for fala in cena.falas:
             n += 1
             voz = _voz_de(rot, fala.quem)
-            texto = (fala.emocao or fala.texto) if voz.startswith("eleven:") else fala.texto
-            fala.audio = sintetizar(texto, voz, pasta / f"fala_{n:03d}.mp3", chave)
+            destino = pasta / f"fala_{n:03d}.mp3"
+            if voz.startswith("eleven:"):
+                fala.audio = sintetizar(fala.emocao or fala.texto, voz, destino, chave)
+            elif "[pause]" in (fala.emocao or "") and chave:
+                partes = [" ".join(re.sub(r"\[[^\]]*\]", " ", p).split()) for p in fala.emocao.split("[pause]")]
+                partes = [p for p in partes if p]
+                fala.audio = (_com_pausas(partes, voz, destino, chave, velocidade) if len(partes) > 1
+                              else sintetizar(fala.texto, voz, destino, chave, velocidade))
+            else:
+                fala.audio = sintetizar(fala.texto, voz, destino, chave, velocidade)
             if rot.efeito_narrador and (fala.quem == "narrador" or fala.quem not in rot.elenco):
                 fala.audio = efeito_de_voz(fala.audio, rot.efeito_narrador, pasta / f"fala_{n:03d}_fx.wav")
             fala.duracao = _duracao(fala.audio)
             fala.inicio = t
-            t += fala.duracao + PAUSA
+            t += fala.duracao + pausa
         cena.fim = t
-        t += 0.2
-    return t + 1.0
+        t += entre_cenas
+    return t + (4.0 if longo else 1.0)
 
 
 # ---------------------------------------------------------------- música de fundo (feita por código)

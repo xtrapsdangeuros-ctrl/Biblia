@@ -167,3 +167,16 @@ def test_sem_credito_no_elevenlabs_usa_o_google(tmp_path, monkeypatch):
     monkeypatch.setattr(animar, "usar_vozes", lambda rot, conf: setattr(rot, "narrador", "eleven:abc@0.5"))
     assert animar.rodar(Drive(), YT(), "raiz", {"animacao": {"ativo": True}}, pedido="01_") == 0
     assert chamadas[0].startswith("eleven:") and not chamadas[1].startswith("eleven:")
+
+
+def test_meditacao_longa_tem_ritmo_calmo(tmp_path):
+    curto = A.ler_roteiro(ROTEIRO)
+    longo = A.ler_roteiro({**ROTEIRO, "formato": "longo"})
+    t_curto = A.preparar_vozes(curto, tmp_path, None)
+    (tmp_path / "l").mkdir()
+    t_longo = A.preparar_vozes(longo, tmp_path / "l", None)
+    assert t_longo > t_curto + 3          # respiros maiores entre falas e cenas
+    (tmp_path / "x").mkdir()
+    _, _, pagina = _montar(tmp_path / "x", {**ROTEIRO, "formato": "longo", "cenas": [
+        {"cenario": "campo", "personagens": [], "destaque": "Salmo 23", "falas": [["narrador", "Respira. [pausa] Eu estou aqui."]]}]})
+    assert 'data-width="1920"' in pagina and "#fundo0 img" in pagina   # só cenário e narração, com zoom lento

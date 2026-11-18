@@ -267,8 +267,11 @@ def composicao(rot: A.Roteiro, total: float, pasta: Path, audio: str) -> str:
         A.cenario(c.cenario, w, h).save(arq)
         ini = 0 if i == 0 else round(c.inicio - 0.2, 3)
         fim = total if i == len(rot.cenas) - 1 else rot.cenas[i + 1].inicio - 0.2
-        clips.append(f'<img id="fundo{i}" class="clip fundo" src="assets/{arq.name}" data-start="{ini}" '
-                     f'data-duration="{round(fim - ini, 3)}" data-track-index="0" style="z-index:0">')
+        clips.append(f'<div id="fundo{i}" class="clip fundo" data-start="{ini}" data-duration="{round(fim - ini, 3)}" '
+                     f'data-track-index="0" style="z-index:0"><img src="assets/{arq.name}"></div>')
+        # zoom bem lento no cenário: a imagem nunca fica parada (importante nas meditações longas)
+        js.append(f'tl.fromTo("#fundo{i} img", {{scale: 1}}, {{scale: {1.08 if not short else 1.04}, '
+                  f'duration: {round(fim - ini, 3)}, ease: "none"}}, {ini});')
         if i:
             clips.append(f'<div id="corte{i}" class="clip corte" data-start="{ini}" data-duration="0.5" '
                          f'data-track-index="10" style="z-index:50"><i></i></div>')
@@ -395,7 +398,8 @@ def composicao(rot: A.Roteiro, total: float, pasta: Path, audio: str) -> str:
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 html, body {{ width: {w}px; height: {h}px; overflow: hidden; background: #f3e7cf; }}
 #root {{ position: relative; width: 100%; height: 100%; font-family: "Archivo Black"; overflow: hidden; }}
-.fundo {{ position: absolute; left: 0; top: 0; width: {w}px; height: {h}px; }}
+.fundo {{ position: absolute; left: 0; top: 0; width: {w}px; height: {h}px; overflow: hidden; }}
+.fundo img {{ width: 100%; height: 100%; transform-origin: 50% 60%; }}
 .corte {{ position: absolute; inset: 0; }}
 .corte i {{ position: absolute; inset: 0; background: #000; }}
 .personagem {{ position: absolute; }}
