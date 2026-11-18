@@ -280,8 +280,8 @@ html, body {{ width: {w}px; height: {h}px; overflow: hidden; background: #f3e7cf
 .personagem {{ position: absolute; }}
 .rig {{ position: relative; width: 100%; height: 100%; transform-origin: 50% 100%; }}
 .rig img {{ position: absolute; left: 0; bottom: 0; width: 100%; }}
-#gancho {{ position: absolute; left: {w * 0.12:.0f}px; right: {w * 0.12:.0f}px; top: {h * (0.155 if short else 0.12):.0f}px; text-align: center; }}
-.gancho-txt {{ font-size: {104 * s:.0f}px; line-height: 1.02; color: {AMARELO}; -webkit-text-stroke: {10 * s:.0f}px {TINTA};
+#gancho {{ position: absolute; left: {w * 0.12:.0f}px; right: {w * 0.12:.0f}px; top: {h * (0.10 if short else 0.08):.0f}px; text-align: center; }}
+.gancho-txt {{ font-size: {(104 if len(rot.gancho) <= 18 else 84 if len(rot.gancho) <= 30 else 70) * s:.0f}px; line-height: 1.02; color: {AMARELO}; -webkit-text-stroke: {10 * s:.0f}px {TINTA};
   paint-order: stroke fill; text-shadow: 0 {12 * s:.0f}px 0 {TINTA}; }}
 .destaque {{ position: absolute; left: {w * 0.08:.0f}px; right: {w * 0.08:.0f}px; top: {h * (0.088 if short else 0.08):.0f}px;
   display: flex; justify-content: center; }}
