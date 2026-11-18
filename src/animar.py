@@ -46,6 +46,7 @@ PADRAO = {
     "pasta_musicas": "Músicas de fundo",
     "voz": "google",                 # google | elevenlabs (segredo ELEVENLABS_API_KEY)
     "elevenlabs": {},                # vozes: {narrador: "Nome ou ID", personagem: ...}
+    "efeito_narrador": "",           # "divino": voz grave, aveludada, com eco de catedral (o roteiro pode trocar)
 }
 
 
@@ -191,6 +192,8 @@ def rodar(drive, youtube, raiz: str, cfg: dict, pedido: str = "", so_drive: bool
             rot = A.ler_roteiro(dados)
             log.info("Fazendo o vídeo animado %d (%s, %d caracteres de voz)...", n, rot.formato, A.caracteres(rot))
             usar_vozes(rot, conf)
+            if not rot.efeito_narrador:
+                rot.efeito_narrador = str(os.environ.get("EFEITO_NARRADOR") or conf.get("efeito_narrador") or "")
             trilha = musica_para(drive, rot, trechos, estado, tmp)
             video = fazer_video(rot, tmp / f"v{n}.mp4", conf["motor"], trilha)
             if so_drive:

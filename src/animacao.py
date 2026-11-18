@@ -67,6 +67,7 @@ class Roteiro:
     musica: str = "calma"
     elenco: dict = field(default_factory=dict)
     narrador: str = VOZ_NARRADOR
+    efeito_narrador: str = ""   # "divino": voz mais grave, aveludada e com eco suave de catedral
 
     @property
     def tamanho(self) -> tuple[int, int]:
@@ -122,7 +123,8 @@ def ler_roteiro(dados: dict) -> Roteiro:
         limpo, marcado = _emocao(str(dados.get("gancho_fala") or gancho))
         cenas[0].falas.insert(0, Fala(quem, limpo, gancho=True, emocao=marcado))
     return Roteiro(dados.get("formato", "short"), dados.get("titulo", ""), cenas, dados.get("gancho", ""),
-                   dados.get("musica", "calma"), elenco, dados.get("narrador", VOZ_NARRADOR))
+                   dados.get("musica", "calma"), elenco, dados.get("narrador", VOZ_NARRADOR),
+                   str(dados.get("efeito_narrador") or ""))
 
 
 # ---------------------------------------------------------------- voz
@@ -158,6 +160,24 @@ def _duracao(audio: Path) -> float:
     return float(saida.strip())
 
 
+EFEITOS = {
+    # Voz "de Deus": um pouco mais grave (sem ficar lenta), graves encorpados, agudos macios e eco de catedral.
+    "divino": ("asetrate=44100*0.95,aresample=44100,atempo=1.0526,"
+               "highpass=f=55,bass=g=5:f=120:w=0.8,equalizer=f=3200:t=q:w=1.2:g=-3,"
+               "aecho=0.85:0.75:45|95|160|240:0.28|0.2|0.13|0.08,"
+               "acompressor=threshold=0.2:ratio=3:attack=10:release=250,alimiter=limit=0.95"),
+}
+
+
+def efeito_de_voz(audio: Path, efeito: str, destino: Path) -> Path:
+    filtro = EFEITOS.get(efeito)
+    if not filtro:
+        return audio
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(audio), "-ac", "1", "-ar", "44100", "-af", filtro,
+                    str(destino)], check=True)
+    return destino
+
+
 def preparar_vozes(rot: Roteiro, pasta: Path, chave: str | None) -> float:
     """Gera o áudio de cada fala e marca o tempo de cada fala e cena. Devolve a duração total."""
     t = 0.15   # a voz entra logo no começo: vídeo mudo no primeiro segundo faz a pessoa passar direto
@@ -169,6 +189,8 @@ def preparar_vozes(rot: Roteiro, pasta: Path, chave: str | None) -> float:
             voz = _voz_de(rot, fala.quem)
             texto = (fala.emocao or fala.texto) if voz.startswith("eleven:") else fala.texto
             fala.audio = sintetizar(texto, voz, pasta / f"fala_{n:03d}.mp3", chave)
+            if rot.efeito_narrador and (fala.quem == "narrador" or fala.quem not in rot.elenco):
+                fala.audio = efeito_de_voz(fala.audio, rot.efeito_narrador, pasta / f"fala_{n:03d}_fx.wav")
             fala.duracao = _duracao(fala.audio)
             fala.inicio = t
             t += fala.duracao + PAUSA

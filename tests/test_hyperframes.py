@@ -124,3 +124,14 @@ def test_elenco_elevenlabs_sem_repetir_voz():
     assert {elenco["dra_berinjela"], elenco["maria"]} == {"id2", "id5"}   # vozes femininas para as duas
     assert len(set(elenco.values())) == len(elenco)          # ninguém com a mesma voz
     assert E.escolher_elenco(rot, vozes, {"narrador": "Roger"})["narrador"] == "id4"
+
+
+def test_efeito_divino_no_narrador(tmp_path):
+    import subprocess
+    voz = tmp_path / "v.mp3"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=f=200:d=1.5", str(voz)], check=True)
+    saida = A.efeito_de_voz(voz, "divino", tmp_path / "v_fx.wav")
+    assert saida.exists() and A._duracao(saida) >= 1.5        # o eco deixa um rastro no fim
+    assert A.efeito_de_voz(voz, "nenhum", tmp_path / "x.wav") == voz
+    rot = A.ler_roteiro({**ROTEIRO, "efeito_narrador": "divino"})
+    assert rot.efeito_narrador == "divino"
