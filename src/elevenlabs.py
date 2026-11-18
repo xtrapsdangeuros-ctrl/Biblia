@@ -102,6 +102,10 @@ def escolher_elenco(rot, vozes: list[dict], fixas: dict | None = None) -> dict[s
     if "narrador" in falantes:   # o narrador escolhe primeiro
         falantes.remove("narrador")
         falantes.insert(0, "narrador")
+    # vozes escolhidas à mão ficam reservadas: o sorteio dos outros personagens não pode pegar
+    for quem, valor in fixas.items():
+        if quem in falantes and achar(valor):
+            usadas.add(achar(valor)["voice_id"])
     elenco = {}
     for quem in falantes:
         if quem in fixas and achar(fixas[quem]):

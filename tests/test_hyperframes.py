@@ -124,6 +124,9 @@ def test_elenco_elevenlabs_sem_repetir_voz():
     assert {elenco["dra_berinjela"], elenco["maria"]} == {"id2", "id5"}   # vozes femininas para as duas
     assert len(set(elenco.values())) == len(elenco)          # ninguém com a mesma voz
     assert E.escolher_elenco(rot, vozes, {"narrador": "Roger"})["narrador"] == "id4"
+    # voz fixa de um personagem não é sorteada para outro
+    fixo = E.escolher_elenco(rot, vozes, {"seu_repolho": "Brian"})
+    assert fixo["seu_repolho"] == "id0" and fixo["narrador"] != "id0"
 
 
 def test_efeito_divino_no_narrador(tmp_path):
