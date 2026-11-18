@@ -447,7 +447,7 @@ def renderizar(rot: A.Roteiro, destino: Path, chave_tts: str | None = None, musi
         shutil.copy(audio, proj / "assets" / "trilha.m4a")
         (proj / "index.html").write_text(composicao(rot, total, proj, "trilha.m4a"), encoding="utf-8")
         env = {**os.environ, "DO_NOT_TRACK": "1", "HYPERFRAMES_NO_PREVIEW_DISCOVERY": "1"}
-        r = subprocess.run([*cmd, "render", "--output", str(destino.resolve()), "--fps", str(fps), "--crf", "20", "--quiet"],
+        r = subprocess.run([*cmd, "render", "--output", str(destino.resolve()), "--fps", str(fps), "--crf", "23", "--quiet"],
                            cwd=proj, capture_output=True, text=True, env=env)
         if r.returncode != 0 or not destino.exists():
             raise RuntimeError(f"hyperframes falhou: {(r.stderr or r.stdout)[-1500:]}")
