@@ -129,7 +129,120 @@ def svg_vegetal(p: P.Personagem) -> str:
 
 
 def _tem_svg(p: P.Personagem) -> bool:
-    return p.tipo in ("tomate", "repolho", "berinjela", "cenoura", "batata", "alface")
+    return p.tipo in ("tomate", "repolho", "berinjela", "cenoura", "batata", "alface", "pessoa")
+
+
+OMBRO_PESSOA = (100, -40)
+
+
+def svg_pessoa(p: P.Personagem) -> str:
+    """Pessoa da Bíblia em SVG: cabeça grande, olhos com brilho, sobrancelhas, túnica com dobras e cinto,
+    mangas, sandálias; opcionais: manto (faixa), barba, cabelo, lenço/véu, coroa, cajado e funda."""
+    x = p.extras
+    cor = lambda chave, padrao: tuple(x.get(chave) or padrao)
+    pele = cor("pele", (225, 180, 140))
+    roupa = cor("roupa", (180, 150, 110))
+    cabelo = cor("cabelo", (60, 40, 30))
+    P_, Ps = _hex(pele), _misturar(pele, (90, 40, 20), 0.25)
+    R, Rs, Rc = _hex(roupa), _misturar(roupa, (0, 0, 0), 0.25), _misturar(roupa, (255, 255, 255), 0.25)
+    C = _hex(cabelo)
+    T = TINTA
+    ox, oy = OMBRO_PESSOA
+    # pernas e sandálias
+    pernas = "".join(
+        f'<rect x="{sx - 17}" y="240" width="34" height="58" rx="14" fill="{P_}" stroke="{T}" stroke-width="6"/>'
+        f'<path d="M{sx - 36} 296 Q{sx} 280 {sx + 40} 296 L{sx + 40} 308 L{sx - 36} 308 Z" fill="#7a4a26" stroke="{T}" stroke-width="6"/>'
+        f'<line x1="{sx - 14}" y1="276" x2="{sx + 16}" y2="290" stroke="#7a4a26" stroke-width="7"/>'
+        for sx in (-48, 48))
+    # túnica
+    corpo = (f'<path d="M-{ox} {oy - 10} Q-128 110 -158 286 Q0 304 158 286 Q128 110 {ox} {oy - 10} Q0 {oy - 38} -{ox} {oy - 10} Z" '
+             f'fill="{R}" stroke="{T}" stroke-width="8" stroke-linejoin="round"/>'
+             f'<path d="M-60 120 Q-72 200 -88 280 M58 130 Q70 210 84 282 M0 140 L4 290" stroke="{Rs}" stroke-width="7" '
+             f'fill="none" stroke-linecap="round" opacity=".8"/>'
+             f'<path d="M-118 74 Q0 96 118 74 L121 102 Q0 124 -121 102 Z" fill="#8a5a30" stroke="{T}" stroke-width="6"/>'
+             f'<path d="M-26 {oy - 22} L0 10 L26 {oy - 22} Z" fill="{Ps}" stroke="{T}" stroke-width="5" stroke-linejoin="round"/>')
+    if x.get("manto"):
+        M = _hex(x["manto"])
+        corpo += (f'<path d="M-{ox - 10} {oy - 16} Q-20 30 70 284 L128 284 Q40 40 -{ox - 60} {oy - 28} Z" fill="{M}" '
+                  f'stroke="{T}" stroke-width="7" stroke-linejoin="round"/>')
+    # braços (mangas largas + mão); o direito segura o cajado ou a funda
+    def braco(lado, s):
+        hx, hy = s * 150, 128
+        extra = ""
+        if lado == "d" and x.get("cajado"):
+            extra = (f'<path d="M{hx + 6} 300 L{hx + 14} -170 Q{hx + 16} -230 {hx + 58} -226 Q{hx + 92} -220 {hx + 82} -186" '
+                     f'stroke="{T}" stroke-width="22" fill="none" stroke-linecap="round"/>'
+                     f'<path d="M{hx + 6} 300 L{hx + 14} -170 Q{hx + 16} -230 {hx + 58} -226 Q{hx + 92} -220 {hx + 82} -186" '
+                     f'stroke="#8b5a2b" stroke-width="11" fill="none" stroke-linecap="round"/>')
+        if lado == "d" and x.get("funda"):
+            extra += (f'<path d="M{hx} {hy} Q{hx + 30} {hy + 70} {hx + 18} {hy + 120} M{hx} {hy} Q{hx - 12} {hy + 70} {hx + 6} {hy + 120}" '
+                      f'stroke="#6b4a2a" stroke-width="5" fill="none"/>'
+                      f'<ellipse cx="{hx + 12}" cy="{hy + 126}" rx="17" ry="11" fill="#7a5532" stroke="{T}" stroke-width="5"/>'
+                      f'<circle cx="{hx + 12}" cy="{hy + 122}" r="7" fill="#9a9a9a"/>')
+        manga = f"M{s * (ox - 6)} {oy} Q{s * 150} {oy + 40} {s * 158} {hy - 24}"
+        return (f'<g class="braco-{lado}">{extra}'
+                f'<path d="{manga}" stroke="{T}" stroke-width="52" fill="none" stroke-linecap="round"/>'
+                f'<path d="{manga}" stroke="{R}" stroke-width="38" fill="none" stroke-linecap="round"/>'
+                f'<circle cx="{hx}" cy="{hy}" r="24" fill="{P_}" stroke="{T}" stroke-width="6"/></g>')
+    bracos = braco("e", -1) + braco("d", 1)
+    # cabeça
+    hy = -150
+    atras = ""
+    if x.get("lenco"):
+        L = _hex(x["lenco"])
+        atras = (f'<path d="M-112 {hy - 30} Q-130 {hy + 90} -120 {hy + 150} L120 {hy + 150} Q130 {hy + 90} 112 {hy - 30} Z" '
+                 f'fill="{_misturar(x["lenco"], (0, 0, 0), 0.15)}" stroke="{T}" stroke-width="7"/>')
+    cabelo_svg = (f'<path d="M-94 {hy - 4} Q-100 {hy - 104} 0 {hy - 108} Q100 {hy - 104} 94 {hy - 4} '
+                  f'Q78 {hy - 58} 30 {hy - 66} Q10 {hy - 40} -20 {hy - 62} Q-72 {hy - 58} -94 {hy - 4} Z" '
+                  f'fill="{C}" stroke="{T}" stroke-width="7" stroke-linejoin="round"/>')
+    if x.get("lenco"):
+        L = _hex(x["lenco"])
+        cabelo_svg = (f'<path d="M-104 {hy + 10} Q-112 {hy - 112} 0 {hy - 114} Q112 {hy - 112} 104 {hy + 10} '
+                      f'Q82 {hy - 62} 0 {hy - 70} Q-82 {hy - 62} -104 {hy + 10} Z" fill="{L}" stroke="{T}" stroke-width="7"/>'
+                      f'<path d="M-86 {hy - 52} Q0 {hy - 86} 86 {hy - 52}" stroke="{_misturar(x["lenco"], (0, 0, 0), 0.25)}" '
+                      f'stroke-width="8" fill="none"/>')
+    barba = ""
+    if x.get("barba"):
+        B = _hex(x["barba"])
+        barba = (f'<path d="M-90 {hy - 4} Q-96 {hy + 104} 0 {hy + 122} Q96 {hy + 104} 90 {hy - 4} '
+                 f'Q66 {hy + 46} 0 {hy + 40} Q-66 {hy + 46} -90 {hy - 4} Z" fill="{B}" stroke="{T}" stroke-width="7" '
+                 f'stroke-linejoin="round"/>'
+                 f'<path d="M-40 {hy + 36} Q0 {hy + 22} 40 {hy + 36}" stroke="{B}" stroke-width="16" stroke-linecap="round" fill="none"/>')
+    coroa = ""
+    if x.get("coroa"):
+        coroa = (f'<path d="M-70 {hy - 82} L-74 {hy - 140} L-38 {hy - 110} L0 {hy - 154} L38 {hy - 110} L74 {hy - 140} L70 {hy - 82} Z" '
+                 f'fill="#f2c335" stroke="{T}" stroke-width="7" stroke-linejoin="round"/>'
+                 f'<circle cx="0" cy="{hy - 100}" r="9" fill="#d23a3a"/><circle cx="-44" cy="{hy - 94}" r="6" fill="#3a7bd2"/>'
+                 f'<circle cx="44" cy="{hy - 94}" r="6" fill="#3a7bd2"/>')
+    sobr = _misturar(x.get("barba") or cabelo, (0, 0, 0), 0.2)
+    rosto = (f'<g class="sobrancelhas"><path d="M-56 {hy - 42} Q-36 {hy - 54} -16 {hy - 44}" stroke="{sobr}" stroke-width="9" '
+             f'fill="none" stroke-linecap="round"/><path d="M16 {hy - 44} Q36 {hy - 54} 56 {hy - 42}" stroke="{sobr}" '
+             f'stroke-width="9" fill="none" stroke-linecap="round"/></g>'
+             f'<g class="olhos"><ellipse cx="-34" cy="{hy - 12}" rx="17" ry="21" fill="#fff" stroke="{T}" stroke-width="5"/>'
+             f'<ellipse cx="34" cy="{hy - 12}" rx="17" ry="21" fill="#fff" stroke="{T}" stroke-width="5"/>'
+             f'<circle cx="-31" cy="{hy - 8}" r="10" fill="{T}"/><circle cx="37" cy="{hy - 8}" r="10" fill="{T}"/>'
+             f'<circle cx="-27" cy="{hy - 13}" r="4" fill="#fff"/><circle cx="41" cy="{hy - 13}" r="4" fill="#fff"/></g>'
+             f'<g class="palpebras" style="opacity:0"><path d="M-52 {hy - 10} Q-34 {hy + 2} -16 {hy - 10}" stroke="{T}" '
+             f'stroke-width="7" fill="none" stroke-linecap="round"/><path d="M16 {hy - 10} Q34 {hy + 2} 52 {hy - 10}" '
+             f'stroke="{T}" stroke-width="7" fill="none" stroke-linecap="round"/></g>'
+             f'<path d="M-4 {hy + 4} Q8 {hy + 22} -6 {hy + 26}" stroke="{Ps}" stroke-width="6" fill="none" stroke-linecap="round"/>'
+             f'<ellipse cx="-58" cy="{hy + 20}" rx="16" ry="10" fill="#f08a8a" opacity=".35"/>'
+             f'<ellipse cx="58" cy="{hy + 20}" rx="16" ry="10" fill="#f08a8a" opacity=".35"/>'
+             f'<path class="boca-fechada" d="M-20 {hy + 46} Q0 {hy + 62} 20 {hy + 46}" stroke="{T}" stroke-width="7" '
+             f'fill="none" stroke-linecap="round"/>'
+             f'<g class="boca-aberta" style="opacity:0"><ellipse cx="0" cy="{hy + 52}" rx="18" ry="15" fill="#7a1a1e" '
+             f'stroke="{T}" stroke-width="5"/><ellipse cx="0" cy="{hy + 60}" rx="10" ry="5" fill="#ec7080"/></g>')
+    cabeca = (f'<g class="cabeca">{atras}'
+              f'<circle cx="-92" cy="{hy + 6}" r="18" fill="{P_}" stroke="{T}" stroke-width="6"/>'
+              f'<circle cx="92" cy="{hy + 6}" r="18" fill="{P_}" stroke="{T}" stroke-width="6"/>'
+              f'<rect x="-24" y="{hy + 70}" width="48" height="50" fill="{P_}" stroke="{T}" stroke-width="6"/>'
+              f'<ellipse cx="0" cy="{hy}" rx="92" ry="96" fill="{P_}" stroke="{T}" stroke-width="8"/>'
+              f'{cabelo_svg}{coroa}{barba}{rosto}</g>')
+    return (f'<svg viewBox="-300 -330 600 660" width="100%" height="100%">'
+            f'<ellipse cx="0" cy="314" rx="150" ry="18" fill="rgba(0,0,0,.18)"/>'
+            f'<g class="corpo">{pernas}{corpo}{bracos}{cabeca}</g></svg>')
+
+
 
 
 # ---------------------------------------------------------------- composição
@@ -189,7 +302,9 @@ def composicao(rot: A.Roteiro, total: float, pasta: Path, audio: str) -> str:
             # o Golias (tamanho 1.6) cresce, mas sem cobrir a legenda (que fica acima de todos)
             alt = min(alt_base * float(p.extras.get("tamanho", 1)), alt_max)
             larg = min(alt / 1.1, w * 0.48)
-            if _tem_svg(p):
+            if p.tipo == "pessoa":
+                miolo = svg_pessoa(p)
+            elif _tem_svg(p):
                 miolo = svg_vegetal(p)
             else:
                 poses = P.poses(p, int(alt))
@@ -220,9 +335,15 @@ def composicao(rot: A.Roteiro, total: float, pasta: Path, audio: str) -> str:
                 t0, t1 = f.inicio, f.inicio + f.duracao
                 js.append(f'tl.to("#{el} .rig", {{y: -28, duration: 0.14, yoyo: true, repeat: 1, ease: "power2.out"}}, {t0:.2f});')
                 if _tem_svg(p):
-                    braco, origem = ("d", "165px 20px") if lado < 0 else ("e", "-165px 20px")
+                    ox, oy = OMBRO_PESSOA if p.tipo == "pessoa" else (165, 20)
+                    braco, origem = ("d", f"{ox} {oy}") if lado < 0 else ("e", f"{-ox} {oy}")
+                    if p.tipo == "pessoa":   # a cabeça acompanha a fala: inclina e as sobrancelhas sobem
+                        js.append(f'tl.to("#{el} .cabeca", {{rotation: {lado * -5}, svgOrigin: "0 -40", duration: 0.3, '
+                                  f'yoyo: true, repeat: 1, ease: "sine.inOut"}}, {t0:.2f});')
+                        js.append(f'tl.to("#{el} .sobrancelhas", {{y: -7, duration: 0.18, yoyo: true, repeat: 1, '
+                                  f'ease: "power2.out"}}, {t0 + 0.05:.2f});')
                     vezes = max(1, int(f.duracao / 0.5)) | 1
-                    js.append(f'tl.to("#{el} .braco-{braco}", {{rotation: {-lado * 35}, svgOrigin: "{origem.replace("px", "")}", '
+                    js.append(f'tl.to("#{el} .braco-{braco}", {{rotation: {-lado * 35}, svgOrigin: "{origem}", '
                               f'duration: 0.25, yoyo: true, repeat: {vezes}, ease: "sine.inOut"}}, {t0 + 0.1:.2f});')
                 t, aberta = t0, True
                 while t < t1 - 0.05:

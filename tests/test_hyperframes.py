@@ -42,9 +42,10 @@ def test_composicao_segue_o_contrato(tmp_path):
     # todo elemento com tempo tem class clip, início e duração
     for tag in re.findall(r"<[^>]*data-start[^>]*>", pagina):
         assert "data-duration" in tag and ("clip" in tag or "<audio" in tag or "data-composition-id" in tag)
-    # a pessoa (Golias) vira desenho PNG; os cenários também
+    # os cenários viram PNG; a pessoa (Golias) é desenhada em SVG, com cabeça que mexe
     arquivos = {p.name for p in (tmp_path / "proj" / "assets").iterdir()}
-    assert {"cenario_0.png", "cenario_1.png", "golias_01.png", "golias_11.png", "golias_00.png"} <= arquivos
+    assert {"cenario_0.png", "cenario_1.png"} <= arquivos
+    assert 'class="cabeca"' in pagina and 'class="sobrancelhas"' in pagina
     # gancho some antes da primeira fala; a legenda tem todas as palavras
     assert 'id="gancho"' in pagina and "Termina" in pagina and "CLT, art. 58" in pagina
 
