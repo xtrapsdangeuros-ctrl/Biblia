@@ -165,7 +165,9 @@ def _duracao(audio: Path) -> float:
 EFEITOS = {
     # Voz "de Deus": um pouco mais grave (sem ficar lenta), graves encorpados, agudos macios e só um toque de ambiente
     # (voz cheia e próxima, sem eco de catedral).
-    "divino": ("asetrate=44100*0.95,aresample=44100,atempo=1.0526,"
+    # (o aresample primeiro iguala a taxa: a voz do Google vem em 24 kHz e a do ElevenLabs em 44,1 kHz; sem isso,
+    # a voz do Google saía acelerada e fina)
+    "divino": ("aresample=44100,asetrate=44100*0.95,aresample=44100,atempo=1.0526,"
                "highpass=f=55,bass=g=5:f=120:w=0.8,equalizer=f=3200:t=q:w=1.2:g=-3,"
                "aecho=0.9:0.85:22|48:0.1|0.05,"
                "acompressor=threshold=0.2:ratio=3:attack=10:release=250,alimiter=limit=0.95"),

@@ -180,3 +180,13 @@ def test_meditacao_longa_tem_ritmo_calmo(tmp_path):
     _, _, pagina = _montar(tmp_path / "x", {**ROTEIRO, "formato": "longo", "cenas": [
         {"cenario": "campo", "personagens": [], "destaque": "Salmo 23", "falas": [["narrador", "Respira. [pausa] Eu estou aqui."]]}]})
     assert 'data-width="1920"' in pagina and "#fundo0 img" in pagina   # só cenário e narração, com zoom lento
+
+
+def test_efeito_divino_nao_acelera_a_voz_do_google(tmp_path):
+    import subprocess
+    for taxa in (24000, 44100):   # Google (24 kHz) e ElevenLabs (44,1 kHz)
+        voz = tmp_path / f"v{taxa}.mp3"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"sine=f=200:d=4:sample_rate={taxa}",
+                        str(voz)], check=True)
+        saida = A.efeito_de_voz(voz, "divino", tmp_path / f"v{taxa}_fx.wav")
+        assert 3.9 <= A._duracao(saida) <= 4.4, taxa   # mesma duração (só o eco curto no fim)
