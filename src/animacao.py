@@ -45,6 +45,7 @@ class Fala:
     duracao: float = 0.0
     audio: Path | None = None
     gancho: bool = False      # a fala do gancho: o texto já aparece grande na tela, sem legenda
+    emocao: str = ""          # o texto com as marcas de emoção ([triste], [sussurrando]...) para o ElevenLabs
 
 
 @dataclass
@@ -72,6 +73,25 @@ class Roteiro:
         return (1080, 1920) if self.formato == "short" else (1920, 1080)
 
 
+# Marcas de emoção no texto da fala, entre colchetes: valem no ElevenLabs (modelo v3) e somem da legenda e do Google.
+EMOCOES = {"triste": "sad", "sussurrando": "whispers", "sussurro": "whispers", "animado": "excited",
+           "empolgado": "excited", "suspiro": "sighs", "suspirando": "sighs", "chorando": "crying",
+           "choro": "crying", "rindo": "laughs", "risada": "laughs", "gritando": "shouts", "grito": "shouts",
+           "bravo": "angry", "com raiva": "angry", "medo": "scared", "com medo": "scared", "pausa": "pause",
+           "emocionado": "emotional", "calmo": "calm", "sério": "serious", "surpreso": "surprised",
+           "esperançoso": "hopeful", "firme": "determined", "voz embargada": "voice breaking"}
+
+
+def _emocao(texto: str) -> tuple[str, str]:
+    """("texto limpo", "texto com as marcas em inglês") — o ElevenLabs entende as marcas em inglês."""
+    def trocar(m):
+        chave = m.group(1).strip().lower()
+        return f"[{EMOCOES.get(chave, chave)}]"
+    marcado = re.sub(r"\[([^\]]+)\]", trocar, texto)
+    limpo = " ".join(re.sub(r"\[[^\]]*\]", " ", texto).split())
+    return limpo, marcado
+
+
 def ler_roteiro(dados: dict) -> Roteiro:
     elenco = dict(P.ELENCO)
     for nome, spec in (dados.get("elenco") or {}).items():
@@ -88,14 +108,19 @@ def ler_roteiro(dados: dict) -> Roteiro:
                                         {**base.extras, **spec})
     cenas = []
     for c in dados.get("cenas") or []:
-        falas = [Fala(str(f[0]), str(f[1])) if isinstance(f, (list, tuple)) else Fala(f.get("quem", "narrador"),
-                 f["texto"]) for f in c.get("falas") or []]
+        falas = []
+        for f in c.get("falas") or []:
+            quem, texto = (str(f[0]), str(f[1])) if isinstance(f, (list, tuple)) else (f.get("quem", "narrador"),
+                                                                                       str(f["texto"]))
+            limpo, marcado = _emocao(texto)
+            falas.append(Fala(quem, limpo, emocao=marcado))
         cenas.append(Cena(c.get("cenario", "neutro"), list(c.get("personagens") or []), falas, c.get("destaque", "")))
     # O vídeo sempre começa com alguém falando: o narrador lê o gancho (ou "gancho_fala", se vier) no quadro 0.
     gancho = str(dados.get("gancho") or "")
     if gancho and cenas and dados.get("gancho_falado", True):
         quem = str(dados.get("gancho_quem") or "narrador")
-        cenas[0].falas.insert(0, Fala(quem, str(dados.get("gancho_fala") or gancho), gancho=True))
+        limpo, marcado = _emocao(str(dados.get("gancho_fala") or gancho))
+        cenas[0].falas.insert(0, Fala(quem, limpo, gancho=True, emocao=marcado))
     return Roteiro(dados.get("formato", "short"), dados.get("titulo", ""), cenas, dados.get("gancho", ""),
                    dados.get("musica", "calma"), elenco, dados.get("narrador", VOZ_NARRADOR))
 
@@ -107,7 +132,13 @@ def _voz_de(rot: Roteiro, quem: str) -> str:
 
 
 def sintetizar(texto: str, voz: str, destino: Path, chave: str | None) -> Path:
-    """MP3 da fala. Sem chave do Google (testes), gera silêncio do tamanho aproximado da fala."""
+    """MP3 da fala. Sem chave do Google (testes), gera silêncio do tamanho aproximado da fala.
+    Voz "eleven:<id>" usa o ElevenLabs (chave no segredo ELEVENLABS_API_KEY)."""
+    if voz.startswith("eleven:"):
+        import elevenlabs
+        if elevenlabs.chave():
+            return elevenlabs.sintetizar(texto, voz.split(":", 1)[1], destino, elevenlabs.chave())
+        chave = None
     if chave:
         from vozes import google
         resp = google("text:synthesize", chave, {
@@ -135,7 +166,9 @@ def preparar_vozes(rot: Roteiro, pasta: Path, chave: str | None) -> float:
         cena.inicio = t
         for fala in cena.falas:
             n += 1
-            fala.audio = sintetizar(fala.texto, _voz_de(rot, fala.quem), pasta / f"fala_{n:03d}.mp3", chave)
+            voz = _voz_de(rot, fala.quem)
+            texto = (fala.emocao or fala.texto) if voz.startswith("eleven:") else fala.texto
+            fala.audio = sintetizar(texto, voz, pasta / f"fala_{n:03d}.mp3", chave)
             fala.duracao = _duracao(fala.audio)
             fala.inicio = t
             t += fala.duracao + PAUSA

@@ -17,6 +17,11 @@ on:
         description: "Só testar: salva o vídeo no Drive (pasta Animações prontas) em vez de publicar"
         type: boolean
         default: false
+      voz:
+        description: "Vozes deste teste (vazio = o que está no canal.yaml)"
+        type: choice
+        options: ["", "google", "elevenlabs"]
+        default: ""
 
 # Só leitura do código: os workflows não alteram o repositório.
 permissions:
@@ -43,6 +48,8 @@ jobs:
       GOOGLE_REFRESH_TOKEN_DRIVE: ${{ secrets.GOOGLE_REFRESH_TOKEN_DRIVE }}
       DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
       GOOGLE_TTS_API_KEY: ${{ secrets.GOOGLE_TTS_API_KEY }}
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      VOZ_ANIMACAO: ${{ inputs.voz }}
       # Sem estatísticas de uso do HyperFrames
       DO_NOT_TRACK: "1"
     steps:

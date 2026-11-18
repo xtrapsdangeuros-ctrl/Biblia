@@ -44,6 +44,8 @@ PADRAO = {
     "motor": "hyperframes",          # hyperframes | antigo
     # Gravações longas (ex.: da banda) nesta pasta do Drive viram trechos de fundo; sem elas, música gerada.
     "pasta_musicas": "Músicas de fundo",
+    "voz": "google",                 # google | elevenlabs (segredo ELEVENLABS_API_KEY)
+    "elevenlabs": {},                # vozes: {narrador: "Nome ou ID", personagem: ...}
 }
 
 
@@ -60,6 +62,19 @@ def fazer_video(rot: A.Roteiro, destino: Path, motor: str = "hyperframes", music
     if motor == "hyperframes":
         log.warning("HyperFrames não instalado: usando o motor antigo.")
     return A.renderizar(rot, destino, chave, musica)
+
+
+def usar_vozes(rot: A.Roteiro, conf: dict) -> None:
+    """Com animacao.voz = elevenlabs (ou VOZ_ANIMACAO no teste), troca as vozes do Google pelas do ElevenLabs."""
+    motor = (os.environ.get("VOZ_ANIMACAO") or conf.get("voz") or "google").strip().lower()
+    if motor != "elevenlabs":
+        return
+    import elevenlabs
+    if not elevenlabs.chave():
+        log.warning("Voz ElevenLabs pedida, mas falta o segredo ELEVENLABS_API_KEY: usando o Google.")
+        return
+    escolhidas = elevenlabs.aplicar(rot, elevenlabs.chave(), (conf.get("elevenlabs") or {}).get("vozes"))
+    log.info("Vozes do ElevenLabs: %s.", discreto.Seguro(", ".join(sorted(set(escolhidas.values())))))
 
 
 def duracao_estimada(rot: A.Roteiro) -> float:
@@ -175,6 +190,7 @@ def rodar(drive, youtube, raiz: str, cfg: dict, pedido: str = "", so_drive: bool
         for n, (item, dados) in enumerate(escolhidos, start=1):
             rot = A.ler_roteiro(dados)
             log.info("Fazendo o vídeo animado %d (%s, %d caracteres de voz)...", n, rot.formato, A.caracteres(rot))
+            usar_vozes(rot, conf)
             trilha = musica_para(drive, rot, trechos, estado, tmp)
             video = fazer_video(rot, tmp / f"v{n}.mp4", conf["motor"], trilha)
             if so_drive:

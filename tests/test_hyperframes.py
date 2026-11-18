@@ -108,3 +108,18 @@ def test_corta_gravacao_longa_em_trechos(tmp_path):
     usos = {trechos[-1]["arquivo"]: 3}
     assert M.escolher(trechos, "calma", 40, usos)["clima"] == "calma"
     assert M.escolher(trechos, "inexistente", 40, {})["arquivo"]
+
+
+def test_elenco_elevenlabs_sem_repetir_voz():
+    import elevenlabs as E
+    vozes = [{"voice_id": f"id{i}", "name": n, "labels": {"gender": g}} for i, (n, g) in enumerate(
+        [("Brian", "male"), ("Liam", "male"), ("Sarah", "female"), ("Callum", "male"), ("Roger", "male"), ("Alice", "female")])]
+    rot = A.ler_roteiro({**ROTEIRO, "elenco": {**ROTEIRO["elenco"],
+                                               "maria": {"tipo": "pessoa", "rotulo": "Maria", "voz": "pt-BR-Chirp3-HD-Kore"}},
+                         "cenas": ROTEIRO["cenas"] + [{"cenario": "campo", "personagens": ["maria"],
+                                                       "falas": [["maria", "Oi."]]}]})
+    elenco = E.escolher_elenco(rot, vozes)
+    assert elenco["narrador"] == "id0"                       # Brian narra
+    assert {elenco["dra_berinjela"], elenco["maria"]} == {"id2", "id5"}   # vozes femininas para as duas
+    assert len(set(elenco.values())) == len(elenco)          # ninguém com a mesma voz
+    assert E.escolher_elenco(rot, vozes, {"narrador": "Roger"})["narrador"] == "id4"
