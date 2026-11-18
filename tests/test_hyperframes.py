@@ -138,3 +138,32 @@ def test_efeito_divino_no_narrador(tmp_path):
     assert A.efeito_de_voz(voz, "nenhum", tmp_path / "x.wav") == voz
     rot = A.ler_roteiro({**ROTEIRO, "efeito_narrador": "divino"})
     assert rot.efeito_narrador == "divino"
+
+
+def test_sem_credito_no_elevenlabs_usa_o_google(tmp_path, monkeypatch):
+    import elevenlabs as E
+    chamadas = []
+
+    def falso(rot, destino, motor="hyperframes", musica=None):
+        chamadas.append(rot.narrador)
+        if rot.narrador.startswith("eleven:"):
+            raise E.ErroElevenLabs("ElevenLabs recusou (401): quota_exceeded")
+        return destino
+
+    class Drive:
+        def pasta(self, *a): return "p"
+        def ler_json(self, *a): return {"videos": {}, "dias": {}}
+        def listar(self, *a): return []
+        def achar(self, *a): return None
+        def enviar(self, *a): return "x"
+        def gravar_json(self, *a): pass
+        def mover(self, *a): pass
+
+    class YT:
+        def enviar_video(self, *a): return "vid"
+
+    monkeypatch.setattr(animar, "fazer_video", falso)
+    monkeypatch.setattr(animar, "_roteiros", lambda d, p: [({"id": "r", "name": "01_x.yaml"}, ROTEIRO)])
+    monkeypatch.setattr(animar, "usar_vozes", lambda rot, conf: setattr(rot, "narrador", "eleven:abc@0.5"))
+    assert animar.rodar(Drive(), YT(), "raiz", {"animacao": {"ativo": True}}, pedido="01_") == 0
+    assert chamadas[0].startswith("eleven:") and not chamadas[1].startswith("eleven:")

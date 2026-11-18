@@ -212,7 +212,17 @@ def rodar(drive, youtube, raiz: str, cfg: dict, pedido: str = "", so_drive: bool
             if not rot.efeito_narrador:
                 rot.efeito_narrador = str(os.environ.get("EFEITO_NARRADOR") or conf.get("efeito_narrador") or "")
             trilha = musica_para(drive, rot, trechos, estado, tmp)
-            video = fazer_video(rot, tmp / f"v{n}.mp4", conf["motor"], trilha)
+            try:
+                video = fazer_video(rot, tmp / f"v{n}.mp4", conf["motor"], trilha)
+            except Exception as erro:
+                import elevenlabs
+                if not isinstance(erro, elevenlabs.ErroElevenLabs):
+                    raise
+                # créditos do mês acabaram (ou o ElevenLabs saiu do ar): o vídeo sai com a voz do Google
+                log.warning("ElevenLabs falhou (%s): este vídeo sai com a voz do Google.", discreto.resumo_erro(erro))
+                rot = A.ler_roteiro(dados)
+                rot.efeito_narrador = str(conf.get("efeito_narrador") or "")
+                video = fazer_video(rot, tmp / f"v{n}.mp4", conf["motor"], trilha)
             if so_drive:
                 pronto = drive.pasta(raiz, conf["pasta_prontos"])
                 drive.enviar(video, pronto, item["name"].rsplit(".", 1)[0] + ".mp4", "video/mp4")
