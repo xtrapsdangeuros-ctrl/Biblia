@@ -246,3 +246,17 @@ def test_minutagem_com_encerramento_e_link_do_testamento():
     v = biblia.campos(conf, 1, 365, _caps("Gênesis", 1, [1, 2, 3]), [0, 60, 120], estado, encerramento=200)
     assert "02:00 Gênesis 3\n03:20 Encerramento" in v["minutagem"]
     assert v["testamento"] == "Antigo Testamento" and v["link_testamento"].endswith("PLAT")
+
+
+def test_arte_do_audiolivro_no_estilo_do_canal(tmp_path):
+    from PIL import Image
+    import arte_biblia
+    fundo, capa = tmp_path / "fundo.png", tmp_path / "capa.jpg"
+    Image.new("RGB", (1280, 720), "#efe3c8").save(fundo)
+    Image.new("RGB", (600, 900), "#7fb8b0").save(capa)
+    for (w, h), nome in (((1280, 720), "m.jpg"), ((1920, 1080), "a.png")):
+        saida = arte_biblia.arte_audiolivro(fundo, capa, tmp_path / nome, "Um título bem comprido para quebrar linhas",
+                                            "Autor", "Parte 1 · Caps. 1 a 5", w, h, rodape="Rodapé")
+        assert Image.open(saida).size == (w, h)
+    # sem capa também funciona (texto ocupa mais largura)
+    assert arte_biblia.arte_audiolivro(fundo, None, tmp_path / "s.jpg", "Título", "", "").exists()

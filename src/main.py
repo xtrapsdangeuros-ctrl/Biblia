@@ -106,10 +106,21 @@ def publicar_grupo(drive, youtube, livro, capitulos: list, estado: dict, cfg: di
             rotulo, titulo = rotulo_e_titulo(usados[0].numero, usados[0].titulo)
         cores = cfg["video"]
         nome_livro, nome_autor = livro_e_autor(ficha)   # a capa mostra "Despertar", não "Ricardo Montemor Despertar"
-        arte = gerar_arte(capa, tmp / "arte.png", nome_livro, nome_autor, rotulo, titulo,
-                          cores["largura"], cores["altura"], cores)
-        miniatura = gerar_arte(capa, tmp / "miniatura.jpg", nome_livro, nome_autor, rotulo,
-                               titulo, 1280, 720, cores, miniatura=True)
+        estilo = cores.get("arte_canal")
+        if estilo and estilo.get("fundo"):
+            # canal da Bíblia: capa do livro sobre o fundo de pergaminho do canal
+            from arte_biblia import arte_audiolivro
+            detalhe = " · ".join(t for t in (rotulo, titulo) if t)
+            fundo = Path(estilo["fundo"])
+            arte = arte_audiolivro(fundo, capa, tmp / "arte.png", nome_livro, nome_autor, detalhe,
+                                   cores["largura"], cores["altura"], rodape=estilo.get("rodape") or "")
+            miniatura = arte_audiolivro(fundo, capa, tmp / "miniatura.jpg", nome_livro, nome_autor, detalhe,
+                                        rodape=estilo.get("rodape") or "")
+        else:
+            arte = gerar_arte(capa, tmp / "arte.png", nome_livro, nome_autor, rotulo, titulo,
+                              cores["largura"], cores["altura"], cores)
+            miniatura = gerar_arte(capa, tmp / "miniatura.jpg", nome_livro, nome_autor, rotulo,
+                                   titulo, 1280, 720, cores, miniatura=True)
         status = {
             "privacyStatus": privacidade,
             "selfDeclaredMadeForKids": bool(ficha.get("para_criancas", False)),
@@ -242,7 +253,15 @@ def audiolivros_extras(drive, youtube, raiz: str, cfg: dict, args) -> int:
         "modo": conf.get("ordem") or "sequencial",
         "livros": list(conf.get("livros") or [])}})
     log.info("Audiolivros: publicando o vídeo do dia.")
-    return publicar_livros(drive, youtube, pasta["id"], cfg_livros, args)
+    with tempfile.TemporaryDirectory() as tmp:
+        # arte no estilo do canal: o fundo de pergaminho da miniatura da Bíblia, com a capa do livro
+        from biblia import _baixar_imagem, config as config_biblia
+        caminho = conf.get("fundo_arte") or (config_biblia(cfg).get("miniatura") or {}).get("fundo") or ""
+        fundo = _baixar_imagem(drive, raiz, caminho, Path(tmp) / "fundo") if caminho else None
+        if fundo:
+            cfg_livros["video"] = {**cfg_livros.get("video", {}), "arte_canal": {
+                "fundo": str(fundo), "rodape": conf.get("rodape") or ""}}
+        return publicar_livros(drive, youtube, pasta["id"], cfg_livros, args)
 
 
 def publicar_livros(drive, youtube, raiz: str, cfg: dict, args) -> int:

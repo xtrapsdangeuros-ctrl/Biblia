@@ -99,3 +99,94 @@ def miniatura(fundo: Path, destino: Path, dia: int, capitulos: list[tuple[str, i
     destino.parent.mkdir(parents=True, exist_ok=True)
     base.save(destino, quality=90, optimize=True)
     return destino
+
+
+# ---------------------------------------------------------------- audiolivros no canal da Bíblia
+
+def _linhas(desenho, texto: str, criar, maximo: int, largura: int, max_linhas: int = 3, altura_max: float = 1e9):
+    """Quebra o texto em até `max_linhas` linhas, com a maior fonte em que tudo cabe (também na altura)."""
+    tamanho = maximo
+    while tamanho > 24:
+        fonte = criar(tamanho)
+        linhas, atual = [], ""
+        for palavra in texto.split():
+            teste = f"{atual} {palavra}".strip()
+            if desenho.textlength(teste, font=fonte) <= largura:
+                atual = teste
+            else:
+                linhas.append(atual)
+                atual = palavra
+        linhas.append(atual)
+        linhas = [l for l in linhas if l]
+        if (len(linhas) <= max_linhas and len(linhas) * tamanho * 1.08 <= altura_max
+                and all(desenho.textlength(l, font=fonte) <= largura for l in linhas)):
+            return fonte, linhas
+        tamanho -= 4
+    return criar(tamanho), [texto]
+
+
+def arte_audiolivro(fundo: Path, capa: Path | None, destino: Path, titulo: str, autor: str, detalhe: str,
+                    largura: int = 1280, altura: int = 720, selo: str = "AUDIOLIVRO",
+                    rodape: str = "") -> Path:
+    """Miniatura (1280x720) ou arte do vídeo (1920x1080) no estilo do canal: fundo de pergaminho com moldura,
+    capa do livro à direita (onde fica o símbolo do canal) com moldura dourada e sombra, textos à esquerda."""
+    from PIL import ImageFilter
+    s = largura / 1280
+    base = ImageOps.fit(Image.open(fundo).convert("RGB"), (largura, altura))
+    if capa:
+        img = Image.open(capa).convert("RGB")
+        alto = int(560 * s)
+        larg = int(img.width * alto / img.height)
+        if larg > 420 * s:   # capa muito larga: limita pela largura
+            larg = int(420 * s)
+            alto = int(img.height * larg / img.width)
+        img = img.resize((larg, alto), Image.LANCZOS)
+        cx, cy = int(1010 * s), int(370 * s)
+        x0, y0 = cx - larg // 2, cy - alto // 2
+        borda = max(4, int(10 * s))
+        sombra = Image.new("RGBA", base.size, (0, 0, 0, 0))
+        ImageDraw.Draw(sombra).rectangle((x0 - borda + int(14 * s), y0 - borda + int(18 * s),
+                                          x0 + larg + borda + int(14 * s), y0 + alto + borda + int(18 * s)),
+                                         fill=(60, 36, 21, 150))
+        sombra = sombra.filter(ImageFilter.GaussianBlur(int(16 * s)))
+        base = Image.alpha_composite(base.convert("RGBA"), sombra).convert("RGB")
+        d = ImageDraw.Draw(base)
+        d.rectangle((x0 - borda, y0 - borda, x0 + larg + borda, y0 + alto + borda), fill=DOURADO)
+        d.rectangle((x0 - 2, y0 - 2, x0 + larg + 1, y0 + alto + 1), fill=MARROM)
+        base.paste(img, (x0, y0))
+    d = ImageDraw.Draw(base)
+    esquerda, area = int(64 * s), int(680 * s) if capa else int(720 * s)
+
+    # selo
+    fonte_selo = lora(int(40 * s))
+    w = d.textlength(selo, font=fonte_selo) + 56 * s
+    d.rounded_rectangle((60 * s, 60 * s, 60 * s + w, 132 * s), radius=int(12 * s), fill=MARROM)
+    d.text((60 * s + w / 2, 96 * s), selo, font=fonte_selo, fill=CREME, anchor="mm")
+
+    # título (até 3 linhas), autor, filete, detalhe
+    fonte_t, linhas = _linhas(d, titulo, titulo_fonte, int(100 * s), area, altura_max=190 * s)
+    y = 150 * s + fonte_t.size * 0.95
+    for linha in linhas:
+        d.text((esquerda, y), linha, font=fonte_t, fill=MARROM, anchor="ls")
+        y += fonte_t.size * 1.08
+    if autor:
+        y += 6 * s
+        fonte_a = _caber(d, autor, lambda t: lora(t), int(48 * s), area)
+        d.text((esquerda, y + fonte_a.size * 0.4), autor, font=fonte_a, fill=DOURADO, anchor="ls")
+        y += fonte_a.size * 1.1
+    y += 24 * s
+    d.line((60 * s, y, 280 * s, y), fill=DOURADO, width=max(2, int(3 * s)))
+    d.line((308 * s, y, 528 * s, y), fill=DOURADO, width=max(2, int(3 * s)))
+    d.polygon([(294 * s, y - 10 * s), (304 * s, y), (294 * s, y + 10 * s), (284 * s, y)], fill=DOURADO)
+    if detalhe:
+        fonte_d = _caber(d, detalhe, lambda t: lora(t, "SemiBold"), int(46 * s), area)
+        d.text((esquerda, y + 58 * s), detalhe, font=fonte_d, fill=TEXTO, anchor="ls")
+    if rodape:
+        fonte_r = _caber(d, rodape, lambda t: lora(t, "Medium"), int(28 * s), area)
+        d.text((esquerda, altura - 46 * s), rodape, font=fonte_r, fill=TEXTO, anchor="ls")
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    if destino.suffix.lower() in (".jpg", ".jpeg"):
+        base.save(destino, quality=90, optimize=True)
+    else:
+        base.save(destino)
+    return destino
