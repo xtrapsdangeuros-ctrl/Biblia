@@ -8,6 +8,7 @@ Fontes livres (licença OFL) na pasta fontes/: Playfair Display (títulos) e Mon
 """
 
 import math
+import re
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
@@ -197,7 +198,7 @@ def _caber(d, texto: str, familia: str, peso: str, maximo: int, minimo: int, lar
 def titulo_curto(titulo: str) -> str:
     """Tira subtítulo ("Livro: subtítulo", "Livro – subtítulo", "Livro (Vol. 2)") para caber no celular."""
     for sep in (":", " – ", " — ", " - ", "("):
-        if sep in titulo and titulo.index(sep) >= 6:
+        if sep in titulo and titulo.index(sep) >= 3:
             titulo = titulo[:titulo.index(sep)]
     return titulo.strip()
 
@@ -263,7 +264,8 @@ def _salvar(img: Image.Image, destino: Path) -> Path:
 # ---------------------------------------------------------------- miniatura 1280x720
 
 def miniatura(capa, destino: Path, livro: str, autor: str, rotulo: str, detalhe: str = "",
-              variante: str = "moldura", largura: int = 1280, altura: int = 720) -> Path:
+              variante: str = "destaque", largura: int = 1280, altura: int = 720,
+              rodape: str = "AUDIOLIVROS PAVÃO", com_autor: bool = False) -> Path:
     """Miniatura do vídeo no visual do canal.
 
     rotulo: o destaque curto ("CAP. 3", "PARTE 2"); detalhe: linha menor opcional ("Capítulos 5 a 9").
@@ -274,7 +276,7 @@ def miniatura(capa, destino: Path, livro: str, autor: str, rotulo: str, detalhe:
     k = W / 1280
     foto = _abrir(capa)
     if variante not in VARIANTES:
-        variante = "moldura"
+        variante = "destaque"
     if foto is None:
         variante = "arte"
     titulo = titulo_curto(livro).upper() if variante != "arte" else titulo_curto(livro)
@@ -337,15 +339,17 @@ def miniatura(capa, destino: Path, livro: str, autor: str, rotulo: str, detalhe:
         y += caixa[3] - caixa[1] + int(30 * k)
         f, linhas = _caber(db, titulo, "serifa", "Black", int(92 * k), int(56 * k), larg, 2)
         y = _texto(db, (x, y), linhas, f, rgb(CREME), 1.02) + int(f.size * 0.15)
-        y = detalhe_e_autor(y, x, larg, False)
-        rodape = int(130 * k)
-        img.alpha_composite(bloco, (0, max(int(30 * k), (H - rodape - y) // 2)))
+        y = detalhe_e_autor(y, x, larg, com_autor)
+        reserva = int(130 * k)   # espaço do selo embaixo
+        img.alpha_composite(bloco, (0, max(int(30 * k), (H - reserva - y) // 2)))
         s = selo(int(90 * k))
         img.alpha_composite(s, (x, H - s.height - int(28 * k)))
-        fa = fonte("sans", "SemiBold", int(28 * k))
-        caixa = d.textbbox((0, 0), "AUDIOLIVROS PAVÃO", font=fa)
-        d.text((x + s.width + int(18 * k), H - int(28 * k) - s.height // 2 - (caixa[3] + caixa[1]) // 2),
-               "AUDIOLIVROS PAVÃO", font=fa, fill=rgb(CREME, 230))
+        fa, texto = _caber(d, rodape or "", "sans", "SemiBold", int(28 * k), int(18 * k),
+                           larg - s.width - int(18 * k), 1)
+        if texto and texto[0]:
+            caixa = d.textbbox((0, 0), texto[0], font=fa)
+            d.text((x + s.width + int(18 * k), H - int(28 * k) - s.height // 2 - (caixa[3] + caixa[1]) // 2),
+                   texto[0], font=fa, fill=rgb(CREME, 230))
 
     else:  # arte: sem a capa
         s = simbolo(int(560 * k))
@@ -358,6 +362,30 @@ def miniatura(capa, destino: Path, livro: str, autor: str, rotulo: str, detalhe:
         y = detalhe_e_autor(y, x, larg, True)
         img.alpha_composite(bloco, (0, max(int(30 * k), (H - y) // 2)))
     return _salvar(img, destino)
+
+
+def adaptar_rotulo(rotulo: str, titulo: str) -> tuple[str, str]:
+    """Textos do robô -> textos da miniatura: 'Capítulo 3' vira 'Cap. 3'; o livro completo vira 'Parte 2'."""
+    rotulo, titulo = (rotulo or "").strip(), (titulo or "").strip()
+    cap = re.fullmatch(r"cap[íi]tulo\s+(\d+)", rotulo, re.IGNORECASE)
+    if cap:
+        return f"Cap. {int(cap.group(1))}", titulo
+    completo = re.fullmatch(r"audiolivro completo(?:\s*[–-]\s*parte\s+(\d+)\s+de\s+(\d+))?", rotulo, re.IGNORECASE)
+    if completo:
+        if completo.group(1):
+            return f"Parte {completo.group(1)}", f"Audiolivro completo · parte {completo.group(1)} de {completo.group(2)}"
+        return "Completo", "Audiolivro completo"
+    return rotulo, titulo
+
+
+def arte(capa, destino: Path, livro: str, autor: str, rotulo: str, titulo: str, largura: int, altura: int,
+         cores: dict, miniatura_: bool = False) -> Path:
+    """Mesmo uso de video.gerar_arte: serve tanto para a miniatura (1280x720) quanto para a imagem do vídeo."""
+    rot, detalhe = adaptar_rotulo(rotulo, titulo)
+    variante = cores.get("miniatura_variante") or "destaque"
+    rodape = "AUDIOLIVROS PAVÃO" if miniatura_ else (cores.get("cta") or "AUDIOLIVROS PAVÃO")
+    return miniatura(capa, destino, livro, autor, rot, detalhe, variante, largura, altura, rodape=rodape,
+                     com_autor=not miniatura_)
 
 
 # ---------------------------------------------------------------- capa quadrada (podcast / playlist)

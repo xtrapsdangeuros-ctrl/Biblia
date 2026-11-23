@@ -67,8 +67,9 @@ def processar(drive, youtube, raiz: str, cfg: dict, dry_run: bool = False) -> in
                     from metadados import intervalo
                     membros = [(int(n), por_numero[n].titulo if n in por_numero else "")
                                for n, r in estado["capitulos"].items() if r["video_id"] == registro["video_id"]]
-                    imagem = gerar_arte(capa, tmp / f"mini_{numero}.jpg", livro.ficha["titulo"],
-                                        livro.ficha.get("autor") or "", f"Parte {registro['parte']}",
+                    from metadados import livro_e_autor
+                    imagem = gerar_arte(capa, tmp / f"mini_{numero}.jpg", *livro_e_autor(livro.ficha),
+                                        f"Parte {registro['parte']}",
                                         intervalo(sorted(membros)), 1280, 720, cfg["video"], miniatura=True)
                 else:
                     imagem = produzir_miniatura(capa, livro.ficha, int(numero), titulo, tmp / f"mini_{numero}.jpg", cfg)

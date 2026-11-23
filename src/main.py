@@ -24,8 +24,7 @@ from video import duracao_audio, gerar_arte, gerar_video
 
 def produzir_miniatura(capa: Path | None, ficha: dict, numero: int, titulo_cap: str, destino: Path, cfg: dict) -> Path:
     rotulo, titulo = rotulo_e_titulo(numero, titulo_cap)
-    return gerar_arte(capa, destino, ficha["titulo"], ficha.get("autor") or "", rotulo, titulo,
-                      1280, 720, cfg["video"], miniatura=True)
+    return gerar_arte(capa, destino, *livro_e_autor(ficha), rotulo, titulo, 1280, 720, cfg["video"], miniatura=True)
 
 
 def produzir(capa: Path | None, audios: list[Path], ficha: dict, numero: int, titulo_cap: str, pasta: Path, cfg: dict) -> tuple[Path, Path]:

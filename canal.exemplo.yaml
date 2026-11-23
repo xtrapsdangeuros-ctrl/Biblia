@@ -19,6 +19,10 @@ video:
   cor_fundo: "#14161c"
   cor_texto: "#f4f1ea"
   cor_destaque: "#f2b84b"
+  # Visual próprio de um canal (opcional). "pavao" = miniatura e imagem do vídeo do Audiolivros Pavão
+  # (src/arte_pavao.py). Sem esta linha, fica a arte padrão (capa à esquerda, textos à direita).
+  # estilo: pavao
+  # miniatura_variante: destaque   # destaque (padrão) | moldura | arte (sem a capa do livro)
 
 publicacao:
   # Livros que o robô NÃO publica (trecho do nome da pasta). Ex.: já estavam no canal antes do robô.
