@@ -418,6 +418,7 @@ def capa_quadrada(capa, destino: Path, livro: str, autor: str, lado: int = 1400,
         d.text((x + 3, y + 4), linha, font=f, fill=(0, 0, 0, 140))
         d.text((x, y), linha, font=f, fill=rgb(CREME))
         y += int(f.size * 1.04)
+    y += int(f.size * 0.22)
     if autor:
         fa = fonte("sans", "SemiBold", int(46 * k))
         caixa = d.textbbox((0, 0), autor, font=fa)
