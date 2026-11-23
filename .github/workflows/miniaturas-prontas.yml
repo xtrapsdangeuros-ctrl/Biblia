@@ -1,0 +1,50 @@
+name: Miniaturas prontas
+
+# Gera as miniaturas novas dos vídeos já publicados (para você trocar à mão no YouTube Studio) e as capas
+# quadradas de podcast, a partir das fotos da pasta "Capas novas" do Drive. Salva tudo no Drive, em pastas ao lado
+# da pasta raiz, com uma planilha de links do Studio. Não muda nada no YouTube (só lê a lista de vídeos).
+# Pode rodar de novo quando chegarem fotos novas: o que já existe é pulado.
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (Settings > Environments), ex.: canal-1"
+        type: string
+        default: "canal-1"
+      so:
+        description: "Só estes livros (códigos separados por espaço, ex.: P07 P30). Vazio = todos com foto"
+        type: string
+        default: ""
+      refazer:
+        description: "Gerar de novo mesmo o que já existe (ex.: trocou a foto de um livro)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  miniaturas:
+    environment: ${{ inputs.canal || 'canal-1' }}
+    concurrency:
+      group: miniaturas-prontas-${{ inputs.canal || 'canal-1' }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      GOOGLE_REFRESH_TOKEN_DRIVE: ${{ secrets.GOOGLE_REFRESH_TOKEN_DRIVE }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
+      SO: ${{ inputs.so }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Instalar dependências
+        run: pip install -q -r requirements.txt
+      - name: Gerar miniaturas e capas de podcast
+        run: python src/miniaturas_prontas.py --so $SO ${{ inputs.refazer && '--refazer' || '' }}

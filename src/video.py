@@ -48,6 +48,9 @@ def _quebrar(desenho: ImageDraw.ImageDraw, texto: str, fonte, largura_max: int, 
 def gerar_arte(capa: Path | None, destino: Path, livro: str, autor: str, rotulo: str, titulo: str,
                largura: int, altura: int, cores: dict, miniatura: bool = False) -> Path:
     """Desenha capa à esquerda e textos à direita sobre um fundo feito da própria capa desfocada."""
+    if cores.get("estilo") == "selo":   # visual próprio do canal (canal.yaml: video > estilo); src/arte_selo.py
+        from arte_selo import arte
+        return arte(capa, destino, livro, autor, rotulo, titulo, largura, altura, cores, miniatura)
     margem = largura // 20
     escurecer = Image.new("RGB", (largura, altura), cores["cor_fundo"])
     if capa:

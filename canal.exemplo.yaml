@@ -19,6 +19,12 @@ video:
   cor_fundo: "#14161c"
   cor_texto: "#f4f1ea"
   cor_destaque: "#f2b84b"
+  # Visual "selo" (opcional, src/arte_selo.py): número do capítulo grande em dourado, capa à direita e o selo do
+  # canal. Sem estas linhas, fica a arte padrão (capa à esquerda, textos à direita).
+  # estilo: selo
+  # miniatura_variante: destaque   # destaque (padrão) | moldura | arte (sem a capa do livro)
+  # marca: "Nome do Canal"         # escrito ao lado do selo
+  # marca_curta: "Canal"           # começo do nome das pastas de miniaturas e capas de podcast no Drive
 
 publicacao:
   # Livros que o robô NÃO publica (trecho do nome da pasta). Ex.: já estavam no canal antes do robô.

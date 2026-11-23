@@ -2,6 +2,6 @@ google-api-python-client>=2.130
 google-auth>=2.29
 google-auth-oauthlib>=1.2
 pyyaml>=6.0
-pillow>=10.3
+pillow>=11.3   # 11.3+ abre fotos .avif
 faster-whisper>=1.0.3
 av>=11,<19   # a 19 quebrou o faster-whisper (open() metadata_errors)

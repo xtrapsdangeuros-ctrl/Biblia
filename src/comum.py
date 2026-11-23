@@ -37,7 +37,7 @@ def configurar_log() -> None:
 
 ARQ_CANAL = "canal.yaml"
 # Partes do config que são do canal (e não do robô): vêm do canal.yaml e ficam escondidas no log.
-BLOCOS_DO_CANAL = ("cta", "video.cta", "publicacao.pausados", "publicacao.livros", "seo.titulos_protegidos",
+BLOCOS_DO_CANAL = ("cta", "video.cta", "video.marca", "video.marca_curta", "publicacao.pausados", "publicacao.livros", "seo.titulos_protegidos",
                    "metadados")
 _cache_canal: dict = {}
 
