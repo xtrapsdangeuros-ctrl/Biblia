@@ -1,0 +1,78 @@
+name: Reels Pavão (teste)
+
+# Só manual: nada roda sozinho nem gasta créditos da ElevenLabs sem alguém apertar "Run workflow".
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Ambiente do canal (canal-1 = Pavão)"
+        type: string
+        default: "canal-1"
+      acao:
+        description: "saldo = só ver créditos e vozes (grátis); narrar = fazer o vídeo"
+        type: choice
+        options: ["saldo", "narrar"]
+        default: "saldo"
+      roteiro:
+        description: "Nome do roteiro na pasta reels/ (ex.: dom-casmurro)"
+        type: string
+        default: ""
+      voz:
+        description: "Nome ou ID da voz da ElevenLabs (vazio = a primeira voz em português da conta)"
+        type: string
+        default: ""
+      modelo:
+        description: "Modelo de voz (v3 e multilingual: 1 crédito por letra; flash: metade)"
+        type: choice
+        options: ["eleven_v3", "eleven_multilingual_v2", "eleven_flash_v2_5"]
+        default: "eleven_v3"
+      gastar:
+        description: "Pode gastar créditos da ElevenLabs (sem marcar, só reaproveita áudio já narrado)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reels-pavao
+  cancel-in-progress: false
+
+jobs:
+  reels:
+    environment: ${{ inputs.canal }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      GOOGLE_REFRESH_TOKEN_DRIVE: ${{ secrets.GOOGLE_REFRESH_TOKEN_DRIVE }}
+      DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: |
+          pip install -q google-api-python-client google-auth pyyaml "pillow>=11.3"
+          if [ "${{ inputs.acao }}" = "narrar" ]; then sudo apt-get update -q && sudo apt-get install -y -q ffmpeg; fi
+
+      - name: Saldo e vozes
+        if: inputs.acao == 'saldo'
+        run: python src/reels.py --saldo
+
+      - name: Narrar e montar o vídeo
+        if: inputs.acao == 'narrar'
+        env:
+          ROTEIRO: ${{ inputs.roteiro }}
+          VOZ: ${{ inputs.voz }}
+          MODELO: ${{ inputs.modelo }}
+        run: |
+          args=(--roteiro "$ROTEIRO" --voz "$VOZ" --modelo "$MODELO")
+          [ "${{ inputs.gastar }}" = "true" ] && args+=(--gastar)
+          python src/reels.py "${args[@]}"
