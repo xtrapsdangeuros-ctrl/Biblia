@@ -35,16 +35,20 @@ def test_um_video_por_grupo_e_rotulos():
 
 def test_videos_antigos_vao_para_o_livro_certo():
     livros = [mp.Livro(mp.Capa("P01", "Eragon", {}), None, nome="Eragon"),
-              mp.Livro(mp.Capa("P02", "Eldest", {}), None, nome="Eldest")]
+              mp.Livro(mp.Capa("P02", "Eldest", {}), None, nome="Eldest"),
+              mp.Livro(mp.Capa("P26", "Herança", {}), None, nome="Herança")]
 
     def v(i, titulo, dur="PT1H2M", quando="2015-01-01"):
         return {"id": i, "snippet": {"title": titulo, "publishedAt": quando}, "contentDetails": {"duration": dur}}
 
-    canal = [v("e2", "Áudiolivro Eldest parte 2", quando="2015-02"), v("e1", "Áudiolivro Eldest parte 1"),
+    canal = [v("e2", "Áudiolivro Eldest PARTE 2 DE 3 (Ciclo da Herança #2)", quando="2015-02"),
+             v("e1", "Áudiolivro Eldest parte 1 (Ciclo da Herança #2)", quando="2015-03"),
+             v("h1", "Áudiolivro Herança parte 1 (Ciclo da Herança #4)"),
              v("g", "Eragon 3/4"), v("s", "Eldest em 1 minuto", dur="PT59S"), v("r", "Eldest robô")]
-    assert mp.distribuir_antigos(canal, livros, do_robo={"r"}) == 3
+    assert mp.distribuir_antigos(canal, livros, do_robo={"r"}) == 4
     assert [(x.video_id, x.rotulo) for x in livros[1].videos] == [("e1", "Parte 1"), ("e2", "Parte 2")]
     assert [(x.video_id, x.rotulo) for x in livros[0].videos] == [("g", "Parte 3")]
+    assert [x.video_id for x in livros[2].videos] == ["h1"]
 
 
 def test_nome_do_arquivo():

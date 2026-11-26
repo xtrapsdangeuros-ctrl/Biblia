@@ -123,7 +123,8 @@ def segundos(duracao_iso: str) -> int:
 
 def distribuir_antigos(videos_canal: list[dict], livros: list[Livro], do_robo: set) -> int:
     """Vídeos que não estão em nenhum publicados.json (postados antes do robô) vão para o livro cujo nome aparece
-    no título (o nome mais comprido ganha: "Eldest" não pega "Eragon"). Shorts ficam de fora. Devolve quantos."""
+    no título. Se aparecem vários, ganha o que vem primeiro no título ("Eldest (Ciclo da Herança #2)" é do Eldest,
+    não do Herança); empate, o nome mais comprido. Shorts ficam de fora. Devolve quantos."""
     nomes = sorted(((normalizar(lv.nome), i) for i, lv in enumerate(livros) if len(lv.nome) >= 4),
                    key=lambda x: -len(x[0]))
     por_livro: dict[int, list[dict]] = {}
@@ -131,7 +132,8 @@ def distribuir_antigos(videos_canal: list[dict], livros: list[Livro], do_robo: s
         if v["id"] in do_robo or segundos((v.get("contentDetails") or {}).get("duration", "")) < MIN_SEGUNDOS:
             continue
         titulo = normalizar(v["snippet"]["title"])
-        dono = next((i for nome, i in nomes if nome in titulo), None)
+        achados_titulo = [(titulo.find(nome), -len(nome), i) for nome, i in nomes if nome in titulo]
+        dono = min(achados_titulo)[2] if achados_titulo else None
         if dono is not None:
             por_livro.setdefault(dono, []).append(v)
     achados = 0
@@ -140,7 +142,7 @@ def distribuir_antigos(videos_canal: list[dict], livros: list[Livro], do_robo: s
         for k, v in enumerate(antigos, 1):
             m = _NUMERO_ANTIGO.search(v["snippet"]["title"])
             n = int(m.group(1) or m.group(2)) if m else k
-            livros[i].videos.append(Video(v["id"], f"Parte {n}", "", -10 ** 6 + k))
+            livros[i].videos.append(Video(v["id"], f"Parte {n}", "", -10 ** 6 + n + k / 1000))
             achados += 1
         livros[i].videos.sort(key=lambda x: x.ordem)
     return achados
@@ -192,8 +194,8 @@ def processar(drive, youtube, raiz: str, cfg: dict, so: list[str] | None = None,
         log.warning("Não achei a pasta 'Capas novas' na raiz do Drive.")
         return 1
     capas = ler_capas(drive.listar(pasta_capas["id"]))
-    if so:
-        capas = [c for c in capas if c.codigo in {s.upper() for s in so}]
+    # Com --so, só esses livros são gerados de novo; a planilha continua com todos.
+    escolhidos = {s.upper() for s in so} if so else None
     log.info("Capas com código: %d", len(capas))
 
     pastas = pastas_de_livros(drive, raiz)
@@ -248,6 +250,11 @@ def processar(drive, youtube, raiz: str, cfg: dict, so: list[str] | None = None,
         tmp = Path(tmp)
         for lv in livros:
             pasta_capa = f"{lv.capa.codigo} - {lv.capa.titulo}"
+            gerar = escolhidos is None or lv.capa.codigo in escolhidos
+            if not gerar:
+                for v in lv.videos:
+                    linhas.append(_linha(lv, pasta_capa, v))
+                continue
             foto = drive.baixar(lv.capa.arquivo["id"], tmp / "capas" / lv.capa.arquivo["name"])
             if saida_podcast:
                 nome_q = f"{pasta_capa}.jpg"
@@ -257,12 +264,14 @@ def processar(drive, youtube, raiz: str, cfg: dict, so: list[str] | None = None,
             if not lv.videos:
                 continue
             destino = drive.pasta(saida, pasta_capa)
-            existentes = {i["name"] for i in drive.listar(destino)}
+            existentes = {i["name"]: i for i in drive.listar(destino)}
+            esperados = {nome_arquivo(v) for v in lv.videos}
+            for nome, item in existentes.items():   # sobra de uma execução anterior (vídeo que não é deste livro)
+                if nome.lower().endswith(".jpg") and nome not in esperados:
+                    drive.lixeira(item["id"])
             for v in lv.videos:
                 nome = nome_arquivo(v)
-                linhas.append([lv.capa.codigo, lv.nome, v.titulo_youtube, f"{pasta_capa}/{nome}",
-                               f"https://studio.youtube.com/video/{v.video_id}/edit",
-                               f"https://youtu.be/{v.video_id}", ""])
+                linhas.append(_linha(lv, pasta_capa, v))
                 if nome in existentes and not refazer:
                     puladas += 1
                     continue
@@ -274,6 +283,11 @@ def processar(drive, youtube, raiz: str, cfg: dict, so: list[str] | None = None,
         _gravar_planilha(drive, saida, linhas, tmp)
     log.info("Miniaturas geradas: %d; já existiam: %d; total na lista: %d", feitas, puladas, len(linhas) - 1)
     return 0
+
+
+def _linha(lv: Livro, pasta_capa: str, v: Video) -> list[str]:
+    return [lv.capa.codigo, lv.nome, v.titulo_youtube, f"{pasta_capa}/{nome_arquivo(v)}",
+            f"https://studio.youtube.com/video/{v.video_id}/edit", f"https://youtu.be/{v.video_id}", ""]
 
 
 def _substituir(drive, pasta_id: str, arquivo: Path, nome: str) -> None:
