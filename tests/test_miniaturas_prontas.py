@@ -57,3 +57,9 @@ def test_nome_do_arquivo():
     assert mp.nome_arquivo(mp.Video("a", "Parte 12", titulo_youtube="a/b")) == "Parte 12 - a b.jpg"
     assert mp.nome_arquivo(mp.Video("a", "Prólogo")) == "Prólogo.jpg"
     assert mp.segundos("PT1H2M3S") == 3723 and mp.segundos("") == 0
+
+
+def test_lista_de_nomes():
+    texto = "# comentário\n1abc => P35 - A Mão e a Luva.jpg\nfoto (2).jpeg => F01 - Excalibur.avif\n" \
+            "x => sem codigo.jpg\ny => P36 - Casa Velha.txt\n\n"
+    assert mp.ler_renomear(texto) == [("1abc", "P35 - A Mão e a Luva.jpg"), ("foto (2).jpeg", "F01 - Excalibur.avif")]

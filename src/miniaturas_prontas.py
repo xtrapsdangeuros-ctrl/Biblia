@@ -37,6 +37,10 @@ _NUMERO_ANTIGO = re.compile(r"(?:parte|part|vol(?:ume)?\.?|cap(?:[íi]tulo)?\.?)
 _DURACAO = re.compile(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?")
 MIN_SEGUNDOS = 181    # mais curto que isso é Short (fica de fora)
 PLANILHA = "Miniaturas - lista"
+# Lista opcional na pasta "Capas novas" para dar nome às fotos que chegaram com nome qualquer, uma por linha:
+#   <ID do arquivo no Drive ou nome atual> => P35 - A Mão e a Luva.jpg
+# O robô renomeia, e a lista vai para a lixeira quando tudo deu certo.
+ARQ_RENOMEAR = "renomear.txt"
 
 
 @dataclass
@@ -111,6 +115,43 @@ def videos_do_registro(estado: dict, titulos: dict[int, str]) -> list[Video]:
     for n, vid in (estado.get("completo") or {}).get("partes", {}).items():
         saida.append(Video(vid, f"Parte {n}", "Audiolivro completo", 10 ** 9 + int(n)))
     return sorted(saida, key=lambda v: v.ordem)
+
+
+def ler_renomear(texto: str) -> list[tuple[str, str]]:
+    """Linhas "antigo => novo" (linhas vazias e começadas com # são ignoradas)."""
+    pares = []
+    for linha in texto.splitlines():
+        linha = linha.strip()
+        if not linha or linha.startswith("#") or "=>" not in linha:
+            continue
+        antigo, novo = (p.strip() for p in linha.split("=>", 1))
+        if antigo and novo and _CODIGO.match(Path(novo).stem) and Path(novo).suffix.lower() in EXT_IMAGEM:
+            pares.append((antigo, novo))
+    return pares
+
+
+def aplicar_renomear(drive, pasta_id: str) -> int:
+    itens = drive.listar(pasta_id)
+    lista = next((i for i in itens if i["name"] == ARQ_RENOMEAR), None)
+    if not lista:
+        return 0
+    por_id = {i["id"]: i for i in itens}
+    por_nome = {i["name"]: i for i in itens}
+    feitas = faltou = 0
+    for antigo, novo in ler_renomear(drive.ler_texto(lista["id"])):
+        item = por_id.get(antigo) or por_nome.get(antigo)
+        if not item:
+            faltou += 1
+            continue
+        if item["name"] != novo:
+            drive.api.files().update(fileId=item["id"], body={"name": novo},
+                                     supportsAllDrives=True).execute(num_retries=5)
+        feitas += 1
+    if faltou:
+        log.warning("Lista de nomes: %d linha(s) sem arquivo correspondente; a lista fica na pasta.", faltou)
+    else:
+        drive.lixeira(lista["id"])
+    return feitas
 
 
 def segundos(duracao_iso: str) -> int:
@@ -193,6 +234,9 @@ def processar(drive, youtube, raiz: str, cfg: dict, so: list[str] | None = None,
     if not pasta_capas:
         log.warning("Não achei a pasta 'Capas novas' na raiz do Drive.")
         return 1
+    renomeadas = aplicar_renomear(drive, pasta_capas["id"])
+    if renomeadas:
+        log.info("Fotos renomeadas pela lista: %d", renomeadas)
     capas = ler_capas(drive.listar(pasta_capas["id"]))
     # Com --so, só esses livros são gerados de novo; a planilha continua com todos.
     escolhidos = {s.upper() for s in so} if so else None
