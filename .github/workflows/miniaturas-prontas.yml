@@ -2,7 +2,8 @@ name: Miniaturas prontas
 
 # Gera as miniaturas novas dos vídeos já publicados (para você trocar à mão no YouTube Studio) e as capas
 # quadradas de podcast, a partir das fotos da pasta "Capas novas" do Drive. Salva tudo no Drive, em pastas ao lado
-# da pasta raiz, com uma planilha de links do Studio. Não muda nada no YouTube (só lê a lista de vídeos).
+# da pasta raiz, com uma planilha de links do Studio. Com "aplicar" > 0, também troca as miniaturas no YouTube
+# (50 unidades da cota cada; o que já foi trocado fica anotado e não é trocado de novo).
 # Pode rodar de novo quando chegarem fotos novas: o que já existe é pulado.
 on:
   workflow_dispatch:
@@ -19,6 +20,10 @@ on:
         description: "Gerar de novo mesmo o que já existe (ex.: trocou a foto de um livro)"
         type: boolean
         default: false
+      aplicar:
+        description: "Trocar no YouTube até quantas miniaturas (50 unidades da cota cada; 0 = só gerar no Drive)"
+        type: string
+        default: "0"
 
 permissions:
   contents: read
@@ -38,6 +43,7 @@ jobs:
       GOOGLE_REFRESH_TOKEN_DRIVE: ${{ secrets.GOOGLE_REFRESH_TOKEN_DRIVE }}
       DRIVE_PASTA_RAIZ: ${{ secrets.DRIVE_PASTA_RAIZ }}
       SO: ${{ inputs.so }}
+      APLICAR: ${{ inputs.aplicar || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,4 +53,4 @@ jobs:
       - name: Instalar dependências
         run: pip install -q -r requirements.txt
       - name: Gerar miniaturas e capas de podcast
-        run: python src/miniaturas_prontas.py --so $SO ${{ inputs.refazer && '--refazer' || '' }}
+        run: python src/miniaturas_prontas.py --so $SO --aplicar "$APLICAR" ${{ inputs.refazer && '--refazer' || '' }}

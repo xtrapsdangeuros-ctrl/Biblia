@@ -10,7 +10,8 @@ Lê as fotos da pasta "Capas novas" (dentro da raiz do Drive), cada uma com o c�
   "<marca_curta> - Capas de podcast/P07 - São Bernardo.jpg".
 
 As pastas de saída ficam AO LADO da raiz (nunca dentro: lá o robô acharia que são livros).
-Nada muda no YouTube: só lê a lista de vídeos do canal (umas 20 unidades da cota).
+Sem --aplicar, nada muda no YouTube: só lê a lista de vídeos do canal (umas 20 unidades da cota).
+Com --aplicar N, troca no YouTube a miniatura de até N vídeos (50 unidades cada), anotando o que já foi trocado.
 Rodar de novo é seguro: o que já existe é pulado (use --refazer para gerar de novo).
 
 Uso:
@@ -26,6 +27,7 @@ import re
 import sys
 import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from comum import carregar_config, configurar_log, log, normalizar
@@ -41,6 +43,8 @@ PLANILHA = "Miniaturas - lista"
 #   <ID do arquivo no Drive ou nome atual> => P35 - A Mão e a Luva.jpg
 # O robô renomeia, e a lista vai para a lixeira quando tudo deu certo.
 ARQ_RENOMEAR = "renomear.txt"
+# Vídeos cuja miniatura o robô já trocou no YouTube (fica na pasta das miniaturas prontas).
+ARQ_APLICADAS = "miniaturas aplicadas.json"
 
 
 @dataclass
@@ -221,7 +225,9 @@ def _gravar_planilha(drive, pasta_id: str, linhas: list[list[str]], tmp: Path) -
 
 
 def processar(drive, youtube, raiz: str, cfg: dict, so: list[str] | None = None, refazer: bool = False,
-              dry_run: bool = False, sem_podcast: bool = False) -> int:
+              dry_run: bool = False, sem_podcast: bool = False, aplicar: int = 0) -> int:
+    """aplicar > 0: além de gerar, troca a miniatura no YouTube de até `aplicar` vídeos (50 unidades da cota cada;
+    com --so, só dos livros escolhidos). O que já foi trocado fica anotado e não é trocado de novo."""
     import arte_selo
     from livro import ARQ_PUBLICADOS, carregar_livro, pastas_de_livros
     from metadados import livro_e_autor
@@ -288,7 +294,9 @@ def processar(drive, youtube, raiz: str, cfg: dict, so: list[str] | None = None,
 
     saida = _pasta_ao_lado_da_raiz(drive, raiz, f"{canal} - Miniaturas prontas")
     saida_podcast = None if sem_podcast else _pasta_ao_lado_da_raiz(drive, raiz, f"{canal} - Capas de podcast")
-    feitas = puladas = 0
+    feitas = puladas = trocadas = 0
+    aplicadas = drive.ler_json(saida, ARQ_APLICADAS, {}) if aplicar else {}
+    cota_acabou = False
     linhas = [["Código", "Livro", "Vídeo", "Arquivo", "Abrir no Studio", "Ver no YouTube", "Feito?"]]
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -297,7 +305,7 @@ def processar(drive, youtube, raiz: str, cfg: dict, so: list[str] | None = None,
             gerar = escolhidos is None or lv.capa.codigo in escolhidos
             if not gerar:
                 for v in lv.videos:
-                    linhas.append(_linha(lv, pasta_capa, v))
+                    linhas.append(_linha(lv, pasta_capa, v, aplicadas))
                 continue
             foto = drive.baixar(lv.capa.arquivo["id"], tmp / "capas" / lv.capa.arquivo["name"])
             if saida_podcast:
@@ -315,23 +323,59 @@ def processar(drive, youtube, raiz: str, cfg: dict, so: list[str] | None = None,
                     drive.lixeira(item["id"])
             for v in lv.videos:
                 nome = nome_arquivo(v)
-                linhas.append(_linha(lv, pasta_capa, v))
-                if nome in existentes and not refazer:
+                novo = not (nome in existentes and not refazer)
+                trocar = (aplicar and not cota_acabou and trocadas < aplicar
+                          and (v.video_id not in aplicadas or novo))
+                if novo or trocar:
+                    img = arte_selo.miniatura(foto, tmp / "m.jpg", lv.nome, lv.autor, v.rotulo, v.detalhe,
+                                              variante=video_cfg.get("miniatura_variante") or "destaque",
+                                              rodape=marca.upper())
+                if novo:
+                    _substituir(drive, destino, img, nome)
+                    feitas += 1
+                else:
                     puladas += 1
-                    continue
-                img = arte_selo.miniatura(foto, tmp / "m.jpg", lv.nome, lv.autor, v.rotulo, v.detalhe,
-                                          variante=video_cfg.get("miniatura_variante") or "destaque",
-                                          rodape=marca.upper())
-                _substituir(drive, destino, img, nome)
-                feitas += 1
+                if trocar:
+                    resultado = _trocar_no_youtube(youtube, v.video_id, img)
+                    if resultado == "cota":
+                        cota_acabou = True
+                        log.warning("O YouTube não aceita mais miniaturas hoje (limite diário); o resto fica para "
+                                    "a próxima execução.")
+                    elif resultado == "ok":
+                        aplicadas[v.video_id] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                        trocadas += 1
+                        if trocadas % 10 == 0:
+                            drive.gravar_json(saida, ARQ_APLICADAS, aplicadas)
+                linhas.append(_linha(lv, pasta_capa, v, aplicadas))
+        if aplicar:
+            drive.gravar_json(saida, ARQ_APLICADAS, aplicadas)
         _gravar_planilha(drive, saida, linhas, tmp)
     log.info("Miniaturas geradas: %d; já existiam: %d; total na lista: %d", feitas, puladas, len(linhas) - 1)
+    if aplicar:
+        falta = sum(1 for linha in linhas[1:] if not linha[-1])
+        log.info("Trocadas no YouTube agora: %d; já trocadas antes ou agora: %d; faltam: %d",
+                 trocadas, len(linhas) - 1 - falta, falta)
     return 0
 
 
-def _linha(lv: Livro, pasta_capa: str, v: Video) -> list[str]:
+def _linha(lv: Livro, pasta_capa: str, v: Video, aplicadas: dict | None = None) -> list[str]:
+    feito = "trocada pelo robô em " + aplicadas[v.video_id][:10] if v.video_id in (aplicadas or {}) else ""
     return [lv.capa.codigo, lv.nome, v.titulo_youtube, f"{pasta_capa}/{nome_arquivo(v)}",
-            f"https://studio.youtube.com/video/{v.video_id}/edit", f"https://youtu.be/{v.video_id}", ""]
+            f"https://studio.youtube.com/video/{v.video_id}/edit", f"https://youtu.be/{v.video_id}", feito]
+
+
+def _trocar_no_youtube(youtube, video_id: str, imagem: Path) -> str:
+    """'ok', 'cota' (limite diário acabou) ou 'erro' (este vídeo não deu; segue para o próximo)."""
+    from googleapiclient.errors import HttpError
+    try:
+        youtube.definir_miniatura(video_id, imagem)
+        return "ok"
+    except HttpError as erro:
+        conteudo = (erro.content or b"").lower()
+        if erro.resp.status == 429 or (erro.resp.status == 403 and (b"quota" in conteudo or b"limit" in conteudo)):
+            return "cota"
+        log.warning("Não consegui trocar a miniatura de um vídeo: %s", erro)
+        return "erro"
 
 
 def _substituir(drive, pasta_id: str, arquivo: Path, nome: str) -> None:
@@ -347,6 +391,8 @@ def main() -> int:
     parser.add_argument("--so", nargs="*", help="códigos dos livros (ex.: P07 P30)")
     parser.add_argument("--refazer", action="store_true", help="gera de novo mesmo o que já existe")
     parser.add_argument("--sem-podcast", action="store_true", help="não gera as capas quadradas")
+    parser.add_argument("--aplicar", type=int, default=0,
+                        help="troca no YouTube até N miniaturas (50 unidades da cota cada); com --so, só desses livros")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     from google_api import Drive, YouTube, credenciais_do_ambiente
@@ -354,7 +400,7 @@ def main() -> int:
     raiz = os.environ.get("DRIVE_PASTA_RAIZ") or sys.exit("Falta a variável DRIVE_PASTA_RAIZ")
     so = [c for item in (args.so or []) for c in re.split(r"[\s,;]+", item) if c]
     return processar(Drive(credenciais), YouTube(credenciais), raiz, carregar_config(), so or None,
-                     args.refazer, args.dry_run, args.sem_podcast)
+                     args.refazer, args.dry_run, args.sem_podcast, args.aplicar)
 
 
 if __name__ == "__main__":

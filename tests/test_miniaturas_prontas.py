@@ -63,3 +63,25 @@ def test_lista_de_nomes():
     texto = "# comentário\n1abc => P35 - A Mão e a Luva.jpg\nfoto (2).jpeg => F01 - Excalibur.avif\n" \
             "x => sem codigo.jpg\ny => P36 - Casa Velha.txt\n\n"
     assert mp.ler_renomear(texto) == [("1abc", "P35 - A Mão e a Luva.jpg"), ("foto (2).jpeg", "F01 - Excalibur.avif")]
+
+
+def test_troca_no_youtube_para_quando_a_cota_acaba():
+    from googleapiclient.errors import HttpError
+
+    class Resp(dict):
+        status, reason = 403, "Forbidden"
+
+    class YT:
+        def __init__(self, erro=None):
+            self.erro = erro
+
+        def definir_miniatura(self, vid, img):
+            if self.erro:
+                raise self.erro
+
+    assert mp._trocar_no_youtube(YT(), "a", None) == "ok"
+    assert mp._trocar_no_youtube(YT(HttpError(Resp(), b'{"reason":"quotaExceeded"}')), "a", None) == "cota"
+    assert mp._trocar_no_youtube(YT(HttpError(Resp(), b'{"reason":"forbidden"}')), "a", None) == "erro"
+    lv = mp.Livro(mp.Capa("P06", "Livro", {}), None, nome="Livro")
+    assert mp._linha(lv, "P06 - Livro", mp.Video("a", "Cap. 1"), {"a": "2026-11-26T10:00:00+00:00"})[-1] == \
+        "trocada pelo robô em 2026-11-26"
